@@ -788,7 +788,7 @@ function pinIcon(label, stop){
   return L.divIcon({className:'', html:`<div class="${cls}">${label}</div>`, iconSize:[30,30], iconAnchor:[15,15]});
 }
 
-function render(route){
+function render(route, fly=true){
   current = route; activeDay = null;
   layerGroup.clearLayers();
   const daysEl = document.getElementById('days');
@@ -859,7 +859,7 @@ function render(route){
   document.getElementById('meta-stops').textContent = stopCount;
   document.getElementById('total-km').innerHTML = `TOTAL <b>~${route.km}</b> KM · ${route.name.toUpperCase()}`;
 
-  map.flyToBounds(line.getBounds().pad(0.15),{duration:.9});
+  if(fly) map.flyToBounds(line.getBounds().pad(0.15),{duration:.9});
 }
 
 map.on('popupopen', e => { if(e.popup._source && e.popup._source._stop) enrichPopup(e.popup, e.popup._source._stop); });
@@ -869,11 +869,24 @@ const libLayer = L.layerGroup();
 const picks = new Set(JSON.parse(localStorage.getItem('hokkaido-picks')||'[]'));
 const AREAS = [...new Set(ACTIVITIES.map(a=>a.area))];
 const CATS = [...new Set(ACTIVITIES.map(a=>a.category))];
-const fAreas = new Set(), fCats = new Set();
-let picksOnly = false;
+
+// ---------------- UI STATE PERSISTENCE ----------------
+// Filters, toggles, tab and route survive reloads (per device).
+const uiState = JSON.parse(localStorage.getItem('hokkaido-ui')||'{}');
+const fAreas = new Set(uiState.areas||[]), fCats = new Set(uiState.cats||[]);
+let picksOnly = !!uiState.picksOnly;
+let currentBtnId = uiState.route || 'btn-slow';
+function saveUI(){
+  localStorage.setItem('hokkaido-ui', JSON.stringify({
+    route: currentBtnId,
+    tab: document.getElementById('library').style.display==='block'?'lib':'itin',
+    areas: [...fAreas], cats: [...fCats],
+    picksOnly, nearRoute
+  }));
+}
 
 const CAT_ICON = {food:'🍜',onsen:'♨',sight:'👁',nature:'🌲',museum:'🏛',experience:'✦',nightlife:'🥃',shopping:'🎁',wildlife:'🦢',hotel:'🏨'};
-let nearRoute = false;
+let nearRoute = !!uiState.nearRoute;
 const NEAR_KM = 25;
 
 // min distance (km) from a point to the selected route's driving path,
@@ -910,7 +923,7 @@ function cloudPush(){
   clearTimeout(syncTimer);
   syncTimer = setTimeout(()=>{
     fetch(SYNC_URL,{method:'PUT',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({picks:[...picks],updated:new Date().toISOString()})})
+      body:JSON.stringify({picks:[...picks],route:currentBtnId,updated:new Date().toISOString()})})
       .then(r=>syncStatus(r.ok?'✓ synced':'sync off',r.ok))
       .catch(()=>syncStatus('offline',false));
   },800);
@@ -937,6 +950,8 @@ async function cloudLoad(){
     syncStatus('✓ synced',true);
     if(JSON.stringify([...picks].sort())!==before &&
        document.getElementById('library').style.display==='block') renderLibrary();
+    // partner changed the route variant → follow it (no map jump, no echo)
+    if(d.route && ROUTES[d.route] && d.route!==currentBtnId) setRoute(d.route,false,false);
   }catch(e){ syncStatus('offline',false); }
 }
 // re-pull when the tab regains focus (e.g. partner starred something)
@@ -995,6 +1010,7 @@ function renderLibrary(){
   renderChips();
   const list = libFiltered();
   document.getElementById('lib-count').textContent = list.length+' of '+ACTIVITIES.length+' activities · '+picks.size+' picked';
+  saveUI();
   const wrap = document.getElementById('acts');
   wrap.innerHTML='';
   libLayer.clearLayers();
@@ -1051,6 +1067,7 @@ function setView(lib){
   document.getElementById('library').style.display=lib?'block':'none';
   if(lib){ map.removeLayer(layerGroup); libLayer.addTo(map); renderLibrary(); }
   else   { map.removeLayer(libLayer); layerGroup.addTo(map); }
+  saveUI();
 }
 document.getElementById('tab-itin').onclick=()=>setView(false);
 document.getElementById('tab-lib').onclick=()=>setView(true);
@@ -1085,15 +1102,22 @@ document.getElementById('share-picks').onclick = () => {
 savePicks();
 
 const ROUTES = {'btn-slow':SLOW,'btn-west':WEST,'btn-east':EAST};
+function setRoute(id, fly=true, push=true){
+  if(!ROUTES[id]) id='btn-slow';
+  currentBtnId = id;
+  document.querySelectorAll('.toggle button').forEach(b=>b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  render(ROUTES[id], fly);
+  saveUI();
+  if(push) cloudPush();
+}
 Object.keys(ROUTES).forEach(id=>{
-  document.getElementById(id).addEventListener('click',e=>{
-    document.querySelectorAll('.toggle button').forEach(b=>b.classList.remove('active'));
-    e.currentTarget.classList.add('active');
-    render(ROUTES[id]);
-  });
+  document.getElementById(id).addEventListener('click',()=>setRoute(id));
 });
 
-render(SLOW);
+// restore last session: route, then tab
+setRoute(currentBtnId, true, false);
+if(uiState.tab==='lib') setView(true);
 </script>
 </body>
 </html>
