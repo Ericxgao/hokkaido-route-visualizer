@@ -416,6 +416,7 @@ h1 em{font-style:normal;color:var(--vermilion)}
     <div class="filters" id="f-cat"></div>
     <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
       <div class="lib-count" id="lib-count"></div>
+      <span id="sync-dot" class="fchip" style="border-style:dashed;cursor:default" title="picks sync automatically between devices">sync…</span>
       <button id="share-picks" class="fchip" style="border-color:var(--pine);color:var(--pine)">🔗 share picks</button>
     </div>
     <div id="acts"></div>
@@ -893,9 +894,59 @@ function distToRoute(a){
   return best;
 }
 
+// ---------------- CLOUD SYNC (shared 2-person store) ----------------
+// Picks live in a shared jsonblob.com document as well as localStorage,
+// so both travelers see the same stars. Last write wins; local storage
+// is the offline fallback if the blob ever expires (30 days unused).
+const SYNC_URL = 'https://jsonblob.com/api/jsonBlob/019f7e13-0e1a-7a11-96a4-8481f15876e4';
+let syncTimer = null;
+
+function syncStatus(txt, ok){
+  const d = document.getElementById('sync-dot');
+  if(d){ d.textContent = txt; d.style.color = ok ? 'var(--pine)' : '#a04212'; }
+}
+
+function cloudPush(){
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(()=>{
+    fetch(SYNC_URL,{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({picks:[...picks],updated:new Date().toISOString()})})
+      .then(r=>syncStatus(r.ok?'✓ synced':'sync off',r.ok))
+      .catch(()=>syncStatus('offline',false));
+  },800);
+}
+
+let firstSync = true;
+async function cloudLoad(){
+  try{
+    const r = await fetch(SYNC_URL,{cache:'no-store'});
+    if(!r.ok){ syncStatus('sync off',false); return; }
+    const d = await r.json();
+    const before = JSON.stringify([...picks].sort());
+    if(firstSync){
+      // first load: union local + cloud, so nobody's stars get lost
+      (d.picks||[]).forEach(p=>picks.add(p));
+      if((d.picks||[]).length!==picks.size) cloudPush(); // local had extras
+      firstSync = false;
+    }else{
+      // refreshes: cloud is authoritative, so partner's un-stars stick
+      picks.clear(); (d.picks||[]).forEach(p=>picks.add(p));
+    }
+    localStorage.setItem('hokkaido-picks', JSON.stringify([...picks]));
+    document.getElementById('pick-count').textContent = picks.size;
+    syncStatus('✓ synced',true);
+    if(JSON.stringify([...picks].sort())!==before &&
+       document.getElementById('library').style.display==='block') renderLibrary();
+  }catch(e){ syncStatus('offline',false); }
+}
+// re-pull when the tab regains focus (e.g. partner starred something)
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) cloudLoad(); });
+cloudLoad();
+
 function savePicks(){
   localStorage.setItem('hokkaido-picks', JSON.stringify([...picks]));
   document.getElementById('pick-count').textContent = picks.size;
+  cloudPush();
 }
 
 function libFiltered(){
