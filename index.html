@@ -414,7 +414,10 @@ h1 em{font-style:normal;color:var(--vermilion)}
     <div class="filters" id="f-area"></div>
     <div class="flabel">Type</div>
     <div class="filters" id="f-cat"></div>
-    <div class="lib-count" id="lib-count"></div>
+    <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
+      <div class="lib-count" id="lib-count"></div>
+      <button id="share-picks" class="fchip" style="border-color:var(--pine);color:var(--pine)">🔗 share picks</button>
+    </div>
     <div id="acts"></div>
   </div>
 
@@ -1000,6 +1003,34 @@ function setView(lib){
 }
 document.getElementById('tab-itin').onclick=()=>setView(false);
 document.getElementById('tab-lib').onclick=()=>setView(true);
+
+// ---------------- SHAREABLE PICKS ----------------
+// Picks travel as ACTIVITIES indexes in the URL hash (#picks=1.5.12),
+// always pointing at the deployed site — so a local copy can export
+// its stars into the live one.
+const SITE_URL = 'https://ericxgao.github.io/hokkaido-route-visualizer/';
+
+document.getElementById('share-picks').onclick = () => {
+  const idx = ACTIVITIES.map((a,i)=>picks.has(a.name)?i:-1).filter(i=>i>=0);
+  if(!idx.length){ alert('Star some activities first — then share.'); return; }
+  const url = SITE_URL + '#picks=' + idx.join('.');
+  navigator.clipboard.writeText(url).then(()=>{
+    const b=document.getElementById('share-picks');
+    b.textContent='✓ link copied ('+idx.length+' picks)';
+    setTimeout(()=>b.textContent='🔗 share picks',2500);
+  }).catch(()=>prompt('Copy this link:',url));
+};
+
+// import picks from an incoming share link (merges with existing stars)
+(function importPicks(){
+  const m = location.hash.match(/picks=([\d.]+)/);
+  if(!m) return;
+  const before = picks.size;
+  m[1].split('.').forEach(i=>{ const a=ACTIVITIES[+i]; if(a) picks.add(a.name); });
+  history.replaceState(null,'',location.pathname+location.search);
+  savePicks();
+  if(picks.size>before || before>0){ picksOnly=true; setView(true); }
+})();
 savePicks();
 
 const ROUTES = {'btn-slow':SLOW,'btn-west':WEST,'btn-east':EAST};
