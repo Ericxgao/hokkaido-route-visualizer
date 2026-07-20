@@ -182,6 +182,36 @@ h1 em{font-style:normal;color:var(--vermilion)}
 .act-links a:hover{background:var(--ink);color:var(--paper)}
 .lib-count{font-family:var(--mono);font-size:10.5px;color:#8a8f9c;margin-top:10px}
 
+/* ---------- BOOKING TAB ---------- */
+.book-group{margin:20px 0 8px}
+.book-group-title{
+  font-family:var(--serif);font-weight:800;font-size:17px;
+  display:flex;align-items:center;gap:10px;
+}
+.book-group-title .badge{
+  font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  padding:3px 9px;color:#fff;
+}
+.badge.now{background:var(--vermilion)}
+.badge.soon{background:var(--gold);color:var(--ink)}
+.badge.time{background:var(--pine)}
+.book-group-sub{font-size:11.5px;color:#8a8f9c;margin:3px 0 10px;line-height:1.5}
+.book-item{
+  border:2px solid var(--ink);background:var(--snow);
+  margin:10px 0;padding:10px 12px;cursor:pointer;
+  transition:transform .15s, box-shadow .15s;
+}
+.book-item:hover{transform:translate(-2px,-2px);box-shadow:4px 4px 0 var(--ink)}
+.book-name{font-family:var(--serif);font-weight:700;font-size:14.5px}
+.book-note{font-size:12px;line-height:1.6;color:#454b58;margin-top:4px}
+.book-note b{color:var(--vermilion)}
+.book-links{display:flex;gap:8px;margin-top:8px}
+.book-links a{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-decoration:none;
+  padding:4px 9px;border:1.5px solid var(--ink);color:var(--ink);background:var(--paper-2);
+}
+.book-links a:hover{background:var(--ink);color:var(--paper)}
+
 /* ---------- ROUTE TOGGLE ---------- */
 .toggle-wrap{
   padding:18px 30px;
@@ -405,9 +435,12 @@ h1 em{font-style:normal;color:var(--vermilion)}
   </header>
 
   <div class="tabs">
-    <button id="tab-itin" class="active">旅程 Itinerary</button>
-    <button id="tab-lib">図鑑 Activities<span class="cnt" id="pick-count">0</span></button>
+    <button id="tab-itin" class="active">旅程 Route</button>
+    <button id="tab-lib">図鑑 Explore<span class="cnt" id="pick-count">0</span></button>
+    <button id="tab-book">予約 Book</button>
   </div>
+
+  <div id="booking" style="display:none;padding:14px 30px 40px"></div>
 
   <div id="library">
     <div class="flabel">Region</div>
@@ -956,7 +989,7 @@ let currentBtnId = uiState.route || 'btn-slow';
 function saveUI(){
   localStorage.setItem('hokkaido-ui', JSON.stringify({
     route: currentBtnId,
-    tab: document.getElementById('library').style.display==='block'?'lib':'itin',
+    tab: (typeof currentTab!=='undefined')?currentTab:'itin',
     areas: [...fAreas], cats: [...fCats],
     picksOnly, nearRoute
   }));
@@ -1137,17 +1170,76 @@ function renderLibrary(){
   });
 }
 
-function setView(lib){
-  document.getElementById('tab-itin').classList.toggle('active',!lib);
-  document.getElementById('tab-lib').classList.toggle('active',lib);
-  document.getElementById('itinerary-view').style.display=lib?'none':'';
-  document.getElementById('library').style.display=lib?'block':'none';
-  if(lib){ map.removeLayer(layerGroup); libLayer.addTo(map); renderLibrary(); }
-  else   { map.removeLayer(libLayer); layerGroup.addTo(map); }
+// ---------------- BOOK-NOW LIST ----------------
+// urgency: now = book immediately for a Nov 4-12 trip · soon = reserve in
+// the weeks before · time = can't book, but must be timed/checked
+const BOOK = [
+{u:'now',name:'4WD rental car (CTS)',note:'Winter-tire 4WDs sell out for November pickup. Book Toyota Rent-a-Car or Nippon at CTS now; add an ETC card. Bring your <b>IDP</b> — no permit, no car.',url:'https://rent.toyota.co.jp/eng/',lat:42.7752,lng:141.6923},
+{u:'now',name:'Noboribetsu ryokan (2 nights)',note:'Takinoya and Dai-ichi Takimotokan fill months out for autumn weekends — <b>Nov 9–11 falls Mon–Wed</b>, which helps, but book now for room-with-bath options.',url:'https://www.google.com/maps/search/?api=1&query=Noboribetsu+onsen+ryokan',lat:42.4930,lng:141.1470},
+{u:'now',name:'Sushi Miyakawa (splurge omakase)',note:'Phone bookings open <b>11am on the first business day of the month, one month ahead</b> — for a Nov seat that means calling Oct 1 sharp (or use a hotel concierge / Pocket Concierge now).',url:'https://tabelog.com/en/hokkaido/A0101/A010105/1046463/',lat:43.0587,lng:141.3169},
+{u:'now',name:'HOKKAIDian Homestead cooking class',note:'Tiny host-run operation with 5/5 reviews — few slots per week. Confirm their <b>November program exists</b> before locking your Toya day.',url:'https://www.tripadvisor.com/Attraction_Review-g1113467-d27124139-Reviews-HOKKAIDian_Homestead-Date_Hokkaido.html',lat:42.5200,lng:140.8600},
+{u:'now',name:'Tsuruga resorts (Toya / Shikotsu)',note:'Hikari no Uta and MIZU NO UTA are the top-rated stays on their lakes — private-onsen room categories go first.',url:'https://www.tsuruga.com/en/',lat:42.7600,lng:141.3390},
+{u:'soon',name:'Nikka Yoichi Distillery tour',note:'Guided tour requires <b>advance online reservation</b>; free tastings for passengers only — decide who drives that day.',url:'https://www.nikka.com/eng/distilleries/yoichi/',lat:43.1900,lng:140.7844},
+{u:'soon',name:'Lake Shikotsu winter clear-canoe',note:'Small-group departures (Nov–Mar program) — book the morning slot for glassiest water.',url:'https://ocean-days.com/en/',lat:42.7550,lng:141.3380},
+{u:'soon',name:'Rakuichi soba (Niseko)',note:'12 seats. Dinner omakase books out; even lunch means arriving ~11am. <b>Call ahead — often takes a pre-season break in November.</b>',url:'https://www.tripadvisor.com/Restaurant_Review-g321549-d3605785-Reviews-Sobadokoro_Rakuichi-Niseko_cho_Abuta_gun_Hokkaido.html',lat:42.80,lng:140.66},
+{u:'soon',name:'Kumiko wood-craft workshop',note:'Appointment-only, <b>one group at a time</b> — email/DM ahead with your Sapporo dates.',url:'https://www.tripadvisor.com/Attraction_Review-g298560-d27950594-Reviews-Japanese_Modern_N6_Kitamaruyama-Sapporo_Hokkaido.html',lat:43.0650,lng:141.3100},
+{u:'soon',name:'Umi Hachikyo (tsukko meshi)',note:'Small, always full — reserve a few days ahead for the ikura show.',url:'https://tabelog.com/en/hokkaido/A0101/A010103/1003784/',lat:43.0554,lng:141.3540},
+{u:'soon',name:'Kani Honke crab dinner',note:'November is opening week of snow-crab season — reserve the crab-shabu course; lunch sets need no booking and are the value play.',url:'https://www.kani-honke.jp/en/',lat:43.0664,lng:141.3520},
+{u:'soon',name:'Isezushi (Otaru, Michelin-starred)',note:'Reservation required, <b>closed Wednesdays</b> — book if your Otaru day is a splurge day; Masazushi takes walk-ins more easily.',url:'https://www.isezushi.com/',lat:43.1907,lng:140.9987},
+{u:'time',name:'HokuDai Ginkgo Avenue — go on ARRIVAL day',note:'Peak gold is <b>~Nov 4–7</b>, leaves drop fast after the first cold snap. Free, no booking — just do it Day 1 morning.',url:'https://domingo.ne.jp/en/article/53126',lat:43.0763,lng:141.3437},
+{u:'time',name:'Asahiyama Zoo — closed ~Nov 4–10',note:'Annual winter-changeover closure hits <b>your exact week</b>. Only viable if you go Nov 11–12 (winter hours 10:30–15:30). Check the official calendar before routing.',url:'https://www.city.asahikawa.hokkaido.jp/asahiyamazoo/',lat:43.77,lng:142.48},
+{u:'time',name:'Kurodake Ropeway — closes Nov 10',note:'Maintenance shutdown ~<b>Nov 10–30</b>. Only the first days of your trip work if you route via Sounkyo.',url:'https://www.rinyu.co.jp/kurodake/',lat:43.727,lng:142.949},
+{u:'time',name:'Usuzan Ropeway — maintenance window',note:'Annual shutdown often falls <b>early–mid November</b> — check the official site the day before your Toya visit.',url:'https://usuzan.hokkaido.jp/en/',lat:42.54,lng:140.86},
+{u:'time',name:'Cape Kamui — wind closures',note:'The tip walkway closes in strong wind (common in Nov). Check morning conditions; have Shimamui Coast as the backup.',url:'https://www.kanko-shakotan.jp/',lat:43.33,lng:140.35},
+{u:'time',name:'Banei Tokachi races — Sat/Sun/Mon only',note:'If you take an eastern route, the draft-horse races run <b>weekends + Monday</b> — Nov 7–9 within your window.',url:'https://banei-keiba.or.jp/',lat:42.9187,lng:143.1876},
+{u:'time',name:'Lost Kamuy / Kamuy Lumina (Akan)',note:'Kamuy Lumina night walk usually <b>ends mid-November</b> — book the evening slot early in an eastern itinerary.',url:'https://www.akanainu.jp/lostkamuy/',lat:43.43,lng:144.09},
+{u:'time',name:'Konpirayama crater walk — closes early Nov',note:'Trail shuts for winter in <b>the first days of November</b> — if you want it, it has to be your first Toya stop.',url:'https://www.toya-usu-geopark.org/english/trails/konpira',lat:42.5560,lng:140.8130},
+];
+
+function renderBooking(){
+  const wrap = document.getElementById('booking');
+  const GROUPS = [
+    {u:'now', title:'Book immediately', badge:'now', sub:'Sells out months ahead for November — evaluate and lock these first.'},
+    {u:'soon', title:'Reserve before the trip', badge:'soon', sub:'Days-to-weeks ahead is fine — put reminders in your calendar.'},
+    {u:'time', title:'Time it right (no booking)', badge:'time', sub:'Closures and seasonal windows that decide which DAY you go.'},
+  ];
+  wrap.innerHTML = GROUPS.map(g=>`
+    <div class="book-group">
+      <div class="book-group-title"><span class="badge ${g.badge}">${g.badge==='now'?'book now':g.badge==='soon'?'reserve':'timing'}</span>${g.title}</div>
+      <div class="book-group-sub">${g.sub}</div>
+      ${BOOK.filter(b=>b.u===g.u).map((b,i)=>`
+        <div class="book-item" data-lat="${b.lat}" data-lng="${b.lng}">
+          <div class="book-name">${b.name}</div>
+          <div class="book-note">${b.note}</div>
+          <div class="book-links">
+            <a href="${b.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">BOOK / INFO ↗</a>
+            <a href="https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}" target="_blank" rel="noopener" onclick="event.stopPropagation()">MAPS ↗</a>
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
+  wrap.querySelectorAll('.book-item').forEach(el=>{
+    el.addEventListener('click',()=>map.flyTo([+el.dataset.lat,+el.dataset.lng],11,{duration:.8}));
+  });
+}
+
+let currentTab = 'itin';
+function setTab(tab){
+  currentTab = tab;
+  document.getElementById('tab-itin').classList.toggle('active',tab==='itin');
+  document.getElementById('tab-lib').classList.toggle('active',tab==='lib');
+  document.getElementById('tab-book').classList.toggle('active',tab==='book');
+  document.getElementById('itinerary-view').style.display=tab==='itin'?'':'none';
+  document.getElementById('library').style.display=tab==='lib'?'block':'none';
+  document.getElementById('booking').style.display=tab==='book'?'block':'none';
+  if(tab==='lib'){ map.removeLayer(layerGroup); libLayer.addTo(map); renderLibrary(); }
+  else if(tab==='book'){ map.removeLayer(layerGroup); libLayer.addTo(map); renderLibrary(); renderBooking(); }
+  else { map.removeLayer(libLayer); layerGroup.addTo(map); }
   saveUI();
 }
-document.getElementById('tab-itin').onclick=()=>setView(false);
-document.getElementById('tab-lib').onclick=()=>setView(true);
+function setView(lib){ setTab(lib?'lib':'itin'); }
+document.getElementById('tab-itin').onclick=()=>setTab('itin');
+document.getElementById('tab-lib').onclick=()=>setTab('lib');
+document.getElementById('tab-book').onclick=()=>setTab('book');
 
 // ---------------- SHAREABLE PICKS ----------------
 // Picks travel as ACTIVITIES indexes in the URL hash (#picks=1.5.12),
@@ -1194,7 +1286,7 @@ Object.keys(ROUTES).forEach(id=>{
 
 // restore last session: route, then tab
 setRoute(currentBtnId, true, false);
-if(uiState.tab==='lib') setView(true);
+if(uiState.tab==='lib'||uiState.tab==='book') setTab(uiState.tab);
 </script>
 </body>
 </html>
