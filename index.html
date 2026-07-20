@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>北海道 — Hokkaido Circuit Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101623;
+  --night:#0b1120;
+  --paper:#f4f1ea;
+  --paper-2:#ece8de;
+  --snow:#ffffff;
+  --vermilion:#e34a33;
+  --pine:#2e6e5e;
+  --gold:#c9a227;
+  --line:#d8d2c4;
+  --mono:'IBM Plex Mono',monospace;
+  --serif:'Shippori Mincho',serif;
+  --sans:'Zen Kaku Gothic New',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;}
+body{
+  font-family:var(--sans);
+  background:var(--paper);
+  color:var(--ink);
+  display:flex;
+  overflow:hidden;
+}
+
+/* ---------- SIDEBAR ---------- */
+#sidebar{
+  width:420px;min-width:420px;
+  height:100vh;
+  overflow-y:auto;
+  background:
+    radial-gradient(1200px 400px at -20% -10%, rgba(227,74,51,.06), transparent 60%),
+    repeating-linear-gradient(0deg, transparent 0 27px, rgba(16,22,35,.035) 27px 28px),
+    var(--paper);
+  border-right:3px solid var(--ink);
+  position:relative;
+  z-index:1000;
+  scrollbar-width:thin;
+  scrollbar-color:var(--ink) transparent;
+}
+#sidebar::-webkit-scrollbar{width:6px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--ink)}
+
+header{
+  padding:34px 30px 24px;
+  border-bottom:3px solid var(--ink);
+  position:relative;
+  overflow:hidden;
+}
+header .kanji{
+  position:absolute;
+  right:-14px;top:-30px;
+  font-family:var(--serif);
+  font-size:150px;
+  font-weight:800;
+  color:rgba(16,22,35,.055);
+  line-height:1;
+  pointer-events:none;
+  writing-mode:vertical-rl;
+  letter-spacing:-.1em;
+}
+.eyebrow{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.28em;
+  text-transform:uppercase;
+  color:var(--vermilion);
+  display:flex;align-items:center;gap:10px;
+}
+.eyebrow::before{content:'';width:26px;height:2px;background:var(--vermilion)}
+h1{
+  font-family:var(--serif);
+  font-weight:800;
+  font-size:42px;
+  line-height:1.05;
+  margin:12px 0 6px;
+  letter-spacing:-.01em;
+}
+h1 em{font-style:normal;color:var(--vermilion)}
+.sub{
+  font-size:13px;
+  color:#5a6070;
+  max-width:32ch;
+  line-height:1.6;
+}
+.meta-row{
+  display:flex;gap:0;margin-top:20px;
+  border:2px solid var(--ink);
+  background:var(--snow);
+}
+.meta-cell{
+  flex:1;padding:10px 12px;
+  border-right:2px solid var(--ink);
+}
+.meta-cell:last-child{border-right:none}
+.meta-cell .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:#8a8f9c}
+.meta-cell .v{font-family:var(--serif);font-weight:700;font-size:17px;margin-top:2px}
+.meta-cell .v span{font-size:11px;font-family:var(--mono);color:#8a8f9c;font-weight:400}
+
+/* ---------- VIEW TABS ---------- */
+.tabs{
+  display:flex;
+  border-bottom:3px solid var(--ink);
+  background:var(--paper-2);
+}
+.tabs button{
+  flex:1;
+  font-family:var(--serif);font-weight:700;font-size:15px;
+  padding:13px 8px;
+  background:transparent;border:none;cursor:pointer;
+  color:#7a8090;border-right:2px solid var(--ink);
+  transition:all .2s;
+}
+.tabs button:last-child{border-right:none}
+.tabs button.active{background:var(--vermilion);color:#fff}
+.tabs button .cnt{
+  font-family:var(--mono);font-size:10px;
+  background:var(--ink);color:var(--gold);
+  padding:1px 7px;margin-left:6px;border-radius:10px;
+}
+
+/* ---------- ACTIVITY LIBRARY ---------- */
+#library{padding:14px 30px 40px;display:none}
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.fchip{
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  padding:5px 10px;border:1.5px solid var(--ink);
+  background:var(--snow);cursor:pointer;user-select:none;
+  transition:all .15s;
+}
+.fchip:hover{transform:translateY(-1px)}
+.fchip.on{background:var(--ink);color:var(--gold)}
+.flabel{font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:#8a8f9c;margin:12px 0 2px}
+.act{
+  margin:14px 0;border:2px solid var(--ink);background:var(--snow);
+  transition:transform .15s, box-shadow .15s;position:relative;
+}
+.act:hover{transform:translate(-2px,-2px);box-shadow:4px 4px 0 var(--ink)}
+.act.picked{border-color:var(--pine);box-shadow:4px 4px 0 var(--pine)}
+.act-head{display:flex;align-items:flex-start;gap:10px;padding:11px 12px 8px;cursor:pointer}
+.act-head-main{flex:1;min-width:0}
+.act-name{font-family:var(--serif);font-weight:700;font-size:15px;line-height:1.3}
+.act-sub{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:#8a8f9c;margin-top:2px;text-transform:uppercase}
+.act-sub .cat{color:var(--vermilion)}
+.pick-btn{
+  min-width:34px;height:34px;
+  border:2px solid var(--ink);background:var(--paper-2);
+  font-size:16px;cursor:pointer;line-height:1;
+  transition:all .15s;
+}
+.pick-btn:hover{transform:scale(1.08)}
+.act.picked .pick-btn{background:var(--pine);border-color:var(--pine);color:#fff}
+.act-body{padding:0 12px 12px}
+.act-quote{
+  font-size:12px;line-height:1.6;color:#454b58;
+  border-left:3px solid var(--gold);padding-left:10px;margin:6px 0 8px;
+  font-style:italic;
+}
+.act-rating{font-family:var(--mono);font-size:10px;color:var(--pine);line-height:1.5}
+.act-nov{
+  font-family:var(--mono);font-size:10px;line-height:1.55;
+  color:#a04212;background:#fbeee4;border:1.5px dashed #d98f5f;
+  padding:6px 9px;margin-top:8px;
+}
+.act-nov::before{content:'⚠ NOV — ';font-weight:600}
+.act-links{display:flex;gap:8px;margin-top:9px}
+.act-links a{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;
+  text-decoration:none;padding:4px 9px;
+  border:1.5px solid var(--ink);color:var(--ink);background:var(--paper-2);
+  transition:all .15s;
+}
+.act-links a:hover{background:var(--ink);color:var(--paper)}
+.lib-count{font-family:var(--mono);font-size:10.5px;color:#8a8f9c;margin-top:10px}
+
+/* ---------- ROUTE TOGGLE ---------- */
+.toggle-wrap{
+  padding:18px 30px;
+  border-bottom:2px dashed var(--line);
+}
+.toggle-label{font-family:var(--mono);font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:#8a8f9c;margin-bottom:10px}
+.toggle{
+  display:flex;
+  border:2px solid var(--ink);
+  background:var(--snow);
+  box-shadow:4px 4px 0 var(--ink);
+}
+.toggle button{
+  flex:1;
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:13px;
+  padding:12px 8px;
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  color:#7a8090;
+  transition:all .2s;
+  position:relative;
+}
+.toggle button small{display:block;font-family:var(--mono);font-weight:400;font-size:9.5px;letter-spacing:.08em;margin-top:2px;color:inherit;opacity:.75}
+.toggle button.active{background:var(--ink);color:var(--paper)}
+.toggle button.active small{color:var(--gold)}
+
+/* ---------- DAY CARDS ---------- */
+#days{padding:10px 30px 40px}
+.day{
+  margin:18px 0;
+  border:2px solid var(--ink);
+  background:var(--snow);
+  cursor:pointer;
+  transition:transform .18s, box-shadow .18s;
+  position:relative;
+}
+.day:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink)}
+.day.active{box-shadow:5px 5px 0 var(--vermilion);border-color:var(--vermilion)}
+.day-head{
+  display:flex;align-items:stretch;
+  border-bottom:2px solid var(--ink);
+}
+.day.active .day-head{border-color:var(--vermilion)}
+.day-num{
+  font-family:var(--serif);
+  font-weight:800;
+  font-size:26px;
+  width:64px;min-width:64px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--ink);
+  color:var(--paper);
+}
+.day.active .day-num{background:var(--vermilion)}
+.day-title-wrap{padding:10px 14px;flex:1}
+.day-date{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--vermilion);text-transform:uppercase}
+.day-title{font-family:var(--serif);font-weight:700;font-size:16.5px;line-height:1.25;margin-top:2px}
+.day-body{padding:12px 14px 14px}
+.day-desc{font-size:12.5px;line-height:1.65;color:#454b58}
+.stops{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+.stop-chip{
+  font-family:var(--mono);
+  font-size:10px;
+  padding:4px 9px;
+  border:1.5px solid var(--ink);
+  background:var(--paper-2);
+  letter-spacing:.04em;
+  white-space:nowrap;
+}
+.stop-chip.onsen{border-color:var(--vermilion);color:var(--vermilion);background:#fdeeea}
+.stop-chip.food{border-color:var(--pine);color:var(--pine);background:#e9f2ee}
+.drive-tag{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--mono);font-size:10.5px;
+  margin-top:10px;color:#6b7180;
+}
+.drive-tag b{color:var(--ink)}
+.drive-tag::before{content:'▸';color:var(--gold)}
+
+/* ---------- LEGEND / FOOTER ---------- */
+.legend{
+  margin:6px 30px 0;
+  padding:14px 16px;
+  border:2px dashed var(--line);
+  background:rgba(255,255,255,.55);
+  font-size:11.5px;
+}
+.legend-row{display:flex;align-items:center;gap:10px;margin:4px 0;font-family:var(--mono);font-size:10.5px}
+.swatch{width:26px;height:0;border-top:3px solid}
+.swatch.solid{border-top-style:solid}
+.swatch.dash{border-top-style:dashed}
+.notes{
+  margin:20px 30px 40px;
+  font-size:11.5px;line-height:1.7;color:#5a6070;
+  border-left:3px solid var(--gold);
+  padding-left:14px;
+}
+.notes b{color:var(--ink)}
+
+/* ---------- MAP ---------- */
+#map-wrap{flex:1;position:relative;height:100vh}
+#map{width:100%;height:100%;background:var(--night)}
+/* brighten the dark basemap — tiles are too murky by default */
+#map .leaflet-tile-pane{
+  filter:brightness(1.65) contrast(1.12) saturate(1.15) hue-rotate(-6deg);
+}
+.map-frame{
+  position:absolute;inset:14px;
+  border:2px solid rgba(244,241,234,.25);
+  pointer-events:none;z-index:800;
+}
+.map-title{
+  position:absolute;top:28px;right:34px;z-index:900;
+  text-align:right;pointer-events:none;
+}
+.map-title .jp{
+  font-family:var(--serif);font-weight:800;
+  color:rgba(244,241,234,.92);
+  font-size:30px;letter-spacing:.32em;
+  text-shadow:0 2px 18px rgba(0,0,0,.6);
+}
+.map-title .en{
+  font-family:var(--mono);font-size:10px;letter-spacing:.34em;
+  color:var(--gold);text-transform:uppercase;margin-top:4px;
+}
+#total-km{
+  position:absolute;bottom:30px;right:34px;z-index:900;
+  background:var(--ink);
+  border:2px solid var(--gold);
+  color:var(--paper);
+  font-family:var(--mono);
+  font-size:11px;letter-spacing:.1em;
+  padding:10px 16px;
+  pointer-events:none;
+}
+#total-km b{color:var(--gold);font-size:15px}
+
+/* markers */
+.pin{
+  background:var(--paper);
+  border:2.5px solid var(--ink);
+  border-radius:50%;
+  width:100%;height:100%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--serif);font-weight:800;font-size:12px;
+  color:var(--ink);
+  box-shadow:0 3px 10px rgba(0,0,0,.5);
+  transition:transform .15s;
+}
+.pin.night{background:var(--vermilion);border-color:var(--paper);color:#fff}
+.pin.airport{background:var(--gold);border-color:var(--ink);border-radius:4px}
+.leaflet-marker-icon:hover .pin{transform:scale(1.25)}
+
+.leaflet-popup-content-wrapper{
+  background:var(--paper);border:2px solid var(--ink);border-radius:0;
+  box-shadow:6px 6px 0 rgba(0,0,0,.45);
+  font-family:var(--sans);
+}
+.leaflet-popup-tip{background:var(--ink)}
+.leaflet-popup-content{margin:14px 16px;line-height:1.5}
+.pop-kind{font-family:var(--mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--vermilion)}
+.pop-name{font-family:var(--serif);font-weight:800;font-size:17px;margin:3px 0 2px}
+.pop-jp{font-family:var(--serif);font-size:12px;color:#8a8f9c;margin-bottom:6px}
+.pop-desc{font-size:12px;color:#454b58}
+.pop-img{
+  width:100%;height:120px;object-fit:cover;display:block;
+  border:2px solid var(--ink);margin:8px 0 2px;
+  background:var(--paper-2);
+}
+.pop-img.hide{display:none}
+.pop-links{display:flex;gap:8px;margin-top:9px}
+.pop-links a{
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+  text-decoration:none;padding:5px 9px;
+  border:1.5px solid var(--ink);color:var(--ink);background:var(--paper-2);
+  transition:all .15s;
+}
+.pop-links a:hover{background:var(--ink);color:var(--paper)}
+.pop-links a.wiki{border-color:var(--pine);color:var(--pine)}
+.pop-links a.wiki:hover{background:var(--pine);color:#fff}
+.leaflet-popup-content{margin:14px 16px;line-height:1.5;width:240px!important}
+
+.leaflet-control-attribution{background:rgba(11,17,32,.7)!important;color:#5a6478!important;font-family:var(--mono);font-size:9px!important}
+.leaflet-control-attribution a{color:#8a94ac!important}
+.leaflet-control-zoom a{
+  background:var(--ink)!important;color:var(--paper)!important;
+  border:1px solid rgba(244,241,234,.3)!important;border-radius:0!important;
+}
+
+/* route glow animation */
+@keyframes dashflow{to{stroke-dashoffset:-26}}
+.route-anim{animation:dashflow 1.4s linear infinite}
+
+/* entry animation */
+.day{opacity:0;transform:translateY(14px);animation:rise .5s forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+
+@media (max-width:900px){
+  body{flex-direction:column}
+  #sidebar{width:100%;min-width:0;height:52vh;border-right:none;border-bottom:3px solid var(--ink)}
+  #map-wrap{height:48vh}
+}
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <header>
+    <div class="kanji">北海道</div>
+    <div class="eyebrow">Field Guide · Nov 4 – 12</div>
+    <h1>Hokkaido<br><em>Winter Circuit</em></h1>
+    <p class="sub">Tokyo (HND) → New Chitose (CTS), 7 nights by rental car. Shoulder-season route favoring coasts, onsen towns &amp; low passes.</p>
+    <div class="meta-row">
+      <div class="meta-cell"><div class="k">Nights</div><div class="v">7</div></div>
+      <div class="meta-cell"><div class="k">Distance</div><div class="v" id="meta-km">— <span>km</span></div></div>
+      <div class="meta-cell"><div class="k">Stops</div><div class="v" id="meta-stops">—</div></div>
+      <div class="meta-cell"><div class="k">Season</div><div class="v">初雪 <span>first snow</span></div></div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button id="tab-itin" class="active">旅程 Itinerary</button>
+    <button id="tab-lib">図鑑 Activities<span class="cnt" id="pick-count">0</span></button>
+  </div>
+
+  <div id="library">
+    <div class="flabel">Region</div>
+    <div class="filters" id="f-area"></div>
+    <div class="flabel">Type</div>
+    <div class="filters" id="f-cat"></div>
+    <div class="lib-count" id="lib-count"></div>
+    <div id="acts"></div>
+  </div>
+
+  <div id="itinerary-view">
+  <div class="toggle-wrap">
+    <div class="toggle-label">Route Variant</div>
+    <div class="toggle">
+      <button id="btn-slow" class="active">Slow Pace<small>2-night stays · ≤2 h drives</small></button>
+      <button id="btn-west">West Loop<small>full circuit · onsen &amp; coast</small></button>
+      <button id="btn-east">Eastern Wilds<small>wetlands · long drives</small></button>
+    </div>
+  </div>
+
+  <div id="days"></div>
+
+  <div class="legend">
+    <div class="legend-row"><span class="swatch solid" style="border-color:#e34a33"></span> Daily drive segment</div>
+    <div class="legend-row"><span class="swatch dash" style="border-color:#c9a227"></span> Optional detour</div>
+    <div class="legend-row"><span style="width:26px;text-align:center">●</span> Overnight stay (red pin)</div>
+  </div>
+
+  <div class="notes">
+    <b>November driving notes.</b> Rental cars carry studless winter tires by early Nov — book 4WD anyway. Sunset ≈ 16:20; front-load driving into daylight. Mountain passes (Shiretoko, some Daisetsuzan roads) begin closing. Carry an IDP — mandatory for car pickup.
+  </div>
+  </div><!-- /itinerary-view -->
+</aside>
+
+<div id="map-wrap">
+  <div id="map"></div>
+  <div class="map-frame"></div>
+  <div class="map-title"><div class="jp">北海道</div><div class="en">Route Atlas</div></div>
+  <div id="total-km">TOTAL <b>—</b> KM</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ---------------- DATA ----------------
+const WEST = {
+  name:'West & Central Loop', km:980,
+  days:[
+    {n:0,date:'Wed Nov 4',title:'Arrival · New Chitose',drive:null,
+     desc:'Land CTS 21:15. Skip the car tonight — sleep at the airport hotel or train into Sapporo (~40 min).',
+     stops:[{name:'New Chitose Airport',jp:'新千歳空港',ll:[42.7752,141.6923],kind:'airport',night:true,desc:'Arrival 21:15. Onsen + Royce chocolate factory inside the terminal.'}]},
+    {n:1,date:'Thu Nov 5',title:'Sapporo on foot',drive:'CTS → Sapporo · 50 km',
+     desc:'Nijo Market breakfast, Odori Park, Sapporo Beer Museum, soup curry lunch, Mt. Moiwa ropeway at dusk, ramen alley in Susukino.',
+     stops:[
+      {name:'Nijo Market',jp:'二条市場',ll:[43.0570,141.3607],kind:'food',desc:'Uni & crab donburi breakfast.'},
+      {name:'Sapporo Beer Museum',jp:'サッポロビール博物館',ll:[43.0714,141.3688],kind:'sight',desc:'Meiji-era brick brewery, tasting hall.'},
+      {name:'Mt. Moiwa',jp:'藻岩山',ll:[43.0225,141.3220],kind:'sight',desc:'Ropeway night view — one of Japan’s top three.'},
+      {name:'Sapporo (stay)',jp:'札幌',ll:[43.0686,141.3508],kind:'city',night:true,desc:'Overnight in Susukino / Odori area.'}]},
+    {n:2,date:'Fri Nov 6',title:'Otaru · Shakotan · Niseko',drive:'~150 km · 3.5 h',
+     desc:'Pick up the car. Otaru canal & sushi lunch on Sakaimachi Street, Shakotan coast to Cape Kamui (weather permitting), onsen night under Mt. Yōtei.',
+     stops:[
+      {name:'Otaru Canal',jp:'小樽運河',ll:[43.1990,140.9950],kind:'sight',desc:'Gaslit stone warehouses; glassworks & sushi.'},
+      {name:'Cape Kamui',jp:'神威岬',ll:[43.3357,140.3453],kind:'detour',desc:'Knife-edge cape walk — closes in high wind.'},
+      {name:'Niseko',jp:'ニセコ',ll:[42.8048,140.6874],kind:'onsen',night:true,desc:'Pre-season quiet; rotenburo with Yōtei views.'}]},
+    {n:3,date:'Sat Nov 7',title:'Yōtei · Lake Tōya · Noboribetsu',drive:'~110 km · 2.5 h',
+     desc:'Fukidashi spring water park, Lake Tōya rim & Usu volcano, then Jigokudani “Hell Valley” steaming at dusk. Ryokan night in the best onsen town on the route.',
+     stops:[
+      {name:'Fukidashi Park',jp:'ふきだし公園',ll:[42.8703,140.8672],kind:'sight',desc:'Yōtei snowmelt springs — bring a bottle.'},
+      {name:'Lake Tōya',jp:'洞爺湖',ll:[42.6048,140.8467],kind:'sight',desc:'Caldera lake, Usuzan ropeway.'},
+      {name:'Noboribetsu Onsen',jp:'登別温泉',ll:[42.4930,141.1470],kind:'onsen',night:true,desc:'Jigokudani hell valley + Dai-ichi Takimotokan baths.'}]},
+    {n:4,date:'Sun Nov 8',title:'Cape Chikyū · Lake Shikotsu',drive:'~160 km · 3 h',
+     desc:'Muroran’s clifftop Cape Chikyū, then the impossibly clear Lake Shikotsu. Night back in Sapporo or at Jozankei Onsen in the hills.',
+     stops:[
+      {name:'Cape Chikyū',jp:'地球岬',ll:[42.3050,140.9860],kind:'sight',desc:'“Earth Cape” — 100 m cliffs over the Pacific.'},
+      {name:'Lake Shikotsu',jp:'支笏湖',ll:[42.7550,141.3380],kind:'sight',desc:'Japan’s 2nd-deepest lake; never freezes.'},
+      {name:'Jozankei Onsen',jp:'定山渓温泉',ll:[42.9670,141.1670],kind:'onsen',night:true,desc:'Gorge onsen town 40 min from Sapporo.'}]},
+    {n:5,date:'Mon Nov 9',title:'North to Biei & Furano',drive:'~180 km · 3 h',
+     desc:'Expressway to Asahikawa ramen lunch, then Biei’s patchwork hills, the Blue Pond with early snow, and Shirahige Falls after dark.',
+     stops:[
+      {name:'Asahikawa Ramen',jp:'旭川ラーメン',ll:[43.7706,142.3650],kind:'food',desc:'Shoyu ramen at Aoba or Baikohken.'},
+      {name:'Shirogane Blue Pond',jp:'青い池',ll:[43.4850,142.6210],kind:'sight',desc:'Cobalt water + first snow = surreal.'},
+      {name:'Biei (stay)',jp:'美瑛',ll:[43.5880,142.4670],kind:'city',night:true,desc:'Patchwork hills; pension stay.'}]},
+    {n:6,date:'Tue Nov 10',title:'Asahiyama Zoo · Furano',drive:'~90 km · 2 h',
+     desc:'Japan’s best cold-climate zoo in the morning, Furano cheese & wine factories, Ningle Terrace craft village lit up at night.',
+     stops:[
+      {name:'Asahiyama Zoo',jp:'旭山動物園',ll:[43.7680,142.4790],kind:'sight',desc:'Penguins, seals, polar bears — thrives in cold.'},
+      {name:'Ningle Terrace',jp:'ニングルテラス',ll:[43.3160,142.3720],kind:'sight',desc:'Lantern-lit craft huts in the forest.'},
+      {name:'Furano (stay)',jp:'富良野',ll:[43.3420,142.3830],kind:'city',night:true,desc:'Overnight; omurice curry for dinner.'}]},
+    {n:7,date:'Wed Nov 11',title:'Return to Sapporo',drive:'~120 km · 2.5 h',
+     desc:'Scenic Route 38/夕張 back west. Last shopping at Tanukikoji, jingisukan lamb BBQ farewell dinner.',
+     stops:[
+      {name:'Jingisukan Dinner',jp:'ジンギスカン',ll:[43.0550,141.3540],kind:'food',desc:'Lamb BBQ at Daruma, Susukino.'},
+      {name:'Sapporo (stay)',jp:'札幌',ll:[43.0686,141.3508],kind:'city',night:true,desc:'Final night near the station.'}]},
+    {n:8,date:'Thu Nov 12',title:'Depart CTS',drive:'~50 km · 1 h',
+     desc:'Drop the car (allow +1 h for the shuttle). Airport onsen, food hall, fly out.',
+     stops:[{name:'New Chitose Airport',jp:'新千歳空港',ll:[42.7752,141.6923],kind:'airport',desc:'Departure. Buy Royce & Shiroi Koibito here.'}]},
+  ]
+};
+
+const SLOW = {
+  name:'Slow Pace Loop', km:620,
+  days:[
+    {n:0,date:'Wed Nov 4',title:'Arrival · New Chitose',drive:null,
+     desc:'Land CTS 21:15. Sleep at the airport hotel — no driving tonight.',
+     stops:[{name:'New Chitose Airport',jp:'新千歳空港',ll:[42.7752,141.6923],kind:'airport',night:true,desc:'Arrival 21:15. Terminal hotel + onsen.'}]},
+    {n:1,date:'Thu Nov 5',title:'Sapporo, car-free',drive:'Train CTS → Sapporo · 40 min',
+     desc:'Leave the car for later. Nijo Market breakfast, Odori Park, beer museum, soup curry, Mt. Moiwa night view.',
+     stops:[
+      {name:'Nijo Market',jp:'二条市場',ll:[43.0570,141.3607],kind:'food',desc:'Uni & crab donburi breakfast.'},
+      {name:'Mt. Moiwa',jp:'藻岩山',ll:[43.0225,141.3220],kind:'sight',desc:'Ropeway night view.'},
+      {name:'Sapporo (stay 1/2)',jp:'札幌',ll:[43.0686,141.3508],kind:'city',night:true,desc:'Night 1 of 2 — unpack properly.'}]},
+    {n:2,date:'Fri Nov 6',title:'Sapporo · pick up car · Jozankei dip',drive:'~60 km round trip · 1 h each way',
+     desc:'Slow morning, pick up the car mid-day and warm up with an easy drive: afternoon day-trip soak at Jozankei Onsen, back to Sapporo for jingisukan.',
+     stops:[
+      {name:'Jozankei Onsen (day soak)',jp:'定山渓温泉',ll:[42.9670,141.1670],kind:'onsen',desc:'Gorge foot-baths & day-use ryokan baths.'},
+      {name:'Jingisukan Dinner',jp:'ジンギスカン',ll:[43.0550,141.3540],kind:'food',desc:'Lamb BBQ at Daruma.'},
+      {name:'Sapporo (stay 2/2)',jp:'札幌',ll:[43.0686,141.3508],kind:'city',night:true,desc:'Second Sapporo night.'}]},
+    {n:3,date:'Sat Nov 7',title:'Otaru → Niseko',drive:'~110 km · 2 h total, broken by Otaru',
+     desc:'Only 40 min to Otaru — canal, glassworks, long sushi lunch. Then 75 min over to Niseko. Check in before dark, rotenburo under Yōtei.',
+     stops:[
+      {name:'Otaru Canal',jp:'小樽運河',ll:[43.1990,140.9950],kind:'sight',desc:'Mid-drive stop: canal + Sakaimachi sushi lunch.'},
+      {name:'Niseko (stay 1/2)',jp:'ニセコ',ll:[42.8048,140.6874],kind:'onsen',night:true,desc:'Night 1 of 2. Pre-season rates.'}]},
+    {n:4,date:'Sun Nov 8',title:'Niseko full day — no bags to pack',drive:'local loops only · <1 h',
+     desc:'Wake up with nowhere to drive. Fukidashi spring water, Yōtei viewpoints, Milk Kobo cream puffs, second onsen of the day, izakaya night in Kutchan.',
+     stops:[
+      {name:'Fukidashi Park',jp:'ふきだし公園',ll:[42.8703,140.8672],kind:'sight',desc:'Yōtei snowmelt springs.'},
+      {name:'Milk Kobo',jp:'ミルク工房',ll:[42.8570,140.7280],kind:'food',desc:'Farm sweets with Yōtei head-on.'},
+      {name:'Niseko (stay 2/2)',jp:'ニセコ',ll:[42.8048,140.6874],kind:'onsen',night:true,desc:'Night 2 of 2.'}]},
+    {n:5,date:'Mon Nov 9',title:'Lake Tōya → Noboribetsu',drive:'~95 km · 2 h, broken by Tōya',
+     desc:'One hour to Lake Tōya — lakeside walk, Usuzan ropeway, lunch. One more hour to Noboribetsu, Jigokudani steaming at dusk, ryokan kaiseki.',
+     stops:[
+      {name:'Lake Tōya',jp:'洞爺湖',ll:[42.6048,140.8467],kind:'sight',desc:'Mid-drive stop: caldera lake + volcano ropeway.'},
+      {name:'Noboribetsu Onsen (stay 1/2)',jp:'登別温泉',ll:[42.4930,141.1470],kind:'onsen',night:true,desc:'Night 1 of 2. Jigokudani at dusk.'}]},
+    {n:6,date:'Tue Nov 10',title:'Noboribetsu full day',drive:'optional 30 km loop',
+     desc:'Second onsen morning — the whole point of a ryokan. Oyunuma pond & natural foot-bath river walk, optional Cape Chikyū run (35 min each way), bear park ropeway.',
+     stops:[
+      {name:'Oyunuma Footbath',jp:'大湯沼川足湯',ll:[42.5000,141.1440],kind:'sight',desc:'Hot river through the forest — free foot onsen.'},
+      {name:'Cape Chikyū',jp:'地球岬',ll:[42.3050,140.9860],kind:'detour',desc:'Optional: 100 m Pacific cliffs, 35 min away.'},
+      {name:'Noboribetsu Onsen (stay 2/2)',jp:'登別温泉',ll:[42.4930,141.1470],kind:'onsen',night:true,desc:'Night 2 of 2.'}]},
+    {n:7,date:'Wed Nov 11',title:'Lake Shikotsu → Chitose',drive:'~90 km · 1.75 h, broken by Shikotsu',
+     desc:'Easy morning, then an hour to glass-clear Lake Shikotsu for a lakeside lunch and walk. Final short hop to a Chitose hotel — car drop is painless tomorrow.',
+     stops:[
+      {name:'Lake Shikotsu',jp:'支笏湖',ll:[42.7550,141.3380],kind:'sight',desc:'Mid-drive stop: Japan’s 2nd-deepest lake.'},
+      {name:'Chitose (stay)',jp:'千歳',ll:[42.8210,141.6520],kind:'city',night:true,desc:'Sleep 10 min from the rental drop-off.'}]},
+    {n:8,date:'Thu Nov 12',title:'Depart CTS',drive:'~6 km · 15 min',
+     desc:'Drop the car with zero stress, airport onsen & food hall, fly out.',
+     stops:[{name:'New Chitose Airport',jp:'新千歳空港',ll:[42.7752,141.6923],kind:'airport',desc:'Departure. Royce & Shiroi Koibito.'}]},
+  ]
+};
+
+const EAST = {
+  name:'Eastern Wilds', km:1350,
+  days:[
+    {n:0,date:'Wed Nov 4',title:'Arrival · New Chitose',drive:null,
+     desc:'Land CTS 21:15, overnight at the airport or Sapporo.',
+     stops:[{name:'New Chitose Airport',jp:'新千歳空港',ll:[42.7752,141.6923],kind:'airport',night:true,desc:'Arrival 21:15.'}]},
+    {n:1,date:'Thu Nov 5',title:'Sapporo on foot',drive:'CTS → Sapporo · 50 km',
+     desc:'Markets, beer museum, Mt. Moiwa night view — same city day as the west loop.',
+     stops:[
+      {name:'Nijo Market',jp:'二条市場',ll:[43.0570,141.3607],kind:'food',desc:'Seafood breakfast.'},
+      {name:'Sapporo (stay)',jp:'札幌',ll:[43.0686,141.3508],kind:'city',night:true,desc:'Overnight Susukino.'}]},
+    {n:2,date:'Fri Nov 6',title:'Across the spine to Tokachi',drive:'~210 km · 3.5 h',
+     desc:'Doto Expressway east. Hoshino/Tomamu cloud-terrace country, then Obihiro: butadon pork bowls and Tokachigawa moor-water onsen.',
+     stops:[
+      {name:'Tomamu',jp:'トマム',ll:[43.0640,142.6250],kind:'sight',desc:'Ice village prep season; Unkai terrace closed but scenic.'},
+      {name:'Butadon Lunch',jp:'豚丼',ll:[42.9236,143.1966],kind:'food',desc:'Charcoal pork bowl at Tonta or Panchou.'},
+      {name:'Tokachigawa Onsen',jp:'十勝川温泉',ll:[42.9330,143.3160],kind:'onsen',night:true,desc:'Rare amber “moor” hot spring water.'}]},
+    {n:3,date:'Sat Nov 7',title:'Kushiro wetlands',drive:'~130 km · 2.5 h',
+     desc:'Kushiro Shitsugen marsh lookouts, red-crowned cranes beginning to gather, robatayaki dinner at the fisherman’s wharf.',
+     stops:[
+      {name:'Kushiro Marsh Observatory',jp:'釧路湿原',ll:[43.0870,144.3410],kind:'sight',desc:'Japan’s largest wetland; boardwalk loops.'},
+      {name:'Tsurui Crane Sanctuary',jp:'鶴居村',ll:[43.2300,144.3260],kind:'detour',desc:'Red-crowned cranes — feeding starts Nov.'},
+      {name:'Kushiro (stay)',jp:'釧路',ll:[42.9850,144.3820],kind:'city',night:true,desc:'Robatayaki + Washo Market.'}]},
+    {n:4,date:'Sun Nov 8',title:'Lake Akan · Mashū',drive:'~120 km · 2.5 h',
+     desc:'Marimo moss balls and Ainu kotan village at Lake Akan, then the vertiginous rim of Lake Mashū — Japan’s clearest lake. Onsen night at Kawayu.',
+     stops:[
+      {name:'Lake Akan / Ainu Kotan',jp:'阿寒湖',ll:[43.4420,144.0950],kind:'sight',desc:'Ainu craft village, marimo center.'},
+      {name:'Lake Mashū',jp:'摩周湖',ll:[43.5860,144.5220],kind:'sight',desc:'Caldera rim viewpoint no.1 & 3.'},
+      {name:'Kawayu Onsen',jp:'川湯温泉',ll:[43.6390,144.4480],kind:'onsen',night:true,desc:'Highly acidic sulfur springs by Mt. Iō.'}]},
+    {n:5,date:'Mon Nov 9',title:'Kussharo · Abashiri coast',drive:'~110 km · 2.5 h',
+     desc:'Sunayu’s hot-sand lakeshore (swans arriving), Bihoro Pass panorama if clear, then the Okhotsk coast: Abashiri Prison Museum before dusk.',
+     stops:[
+      {name:'Lake Kussharo · Sunayu',jp:'屈斜路湖 砂湯',ll:[43.6080,144.3430],kind:'sight',desc:'Dig your own onsen on the beach; whooper swans.'},
+      {name:'Bihoro Pass',jp:'美幌峠',ll:[43.6560,144.2960],kind:'detour',desc:'Sweeping caldera panorama — check road status.'},
+      {name:'Abashiri (stay)',jp:'網走',ll:[44.0210,144.2690],kind:'city',night:true,desc:'Prison museum, Okhotsk seafood.'}]},
+    {n:6,date:'Tue Nov 10',title:'Okhotsk coast → Sounkyo',drive:'~180 km · 3.5 h',
+     desc:'Coast road west, Kitami curry-yakisoba lunch, into the Daisetsuzan gorge at Sounkyo: Ginga & Ryusei waterfalls freezing at the edges, big ryokan baths.',
+     stops:[
+      {name:'Ginga / Ryusei Falls',jp:'銀河・流星の滝',ll:[43.7080,142.9680],kind:'sight',desc:'Twin falls on the gorge wall.'},
+      {name:'Sounkyo Onsen',jp:'層雲峡温泉',ll:[43.7280,142.9490],kind:'onsen',night:true,desc:'Gorge-bottom onsen village, ropeway to early snowfields.'}]},
+    {n:7,date:'Wed Nov 11',title:'Asahikawa → Sapporo',drive:'~200 km · 3 h',
+     desc:'Asahiyama Zoo morning, ramen lunch, expressway back to Sapporo for a farewell crab or jingisukan dinner.',
+     stops:[
+      {name:'Asahiyama Zoo',jp:'旭山動物園',ll:[43.7680,142.4790],kind:'sight',desc:'Cold-climate animals at their liveliest.'},
+      {name:'Sapporo (stay)',jp:'札幌',ll:[43.0686,141.3508],kind:'city',night:true,desc:'Final night.'}]},
+    {n:8,date:'Thu Nov 12',title:'Depart CTS',drive:'~50 km · 1 h',
+     desc:'Drop the car, airport food hall, fly out.',
+     stops:[{name:'New Chitose Airport',jp:'新千歳空港',ll:[42.7752,141.6923],kind:'airport',desc:'Departure.'}]},
+  ]
+};
+
+// ---------------- ACTIVITY LIBRARY ----------------
+// Researched Jul 2026 from TripAdvisor, Reddit (r/JapanTravel, r/Hokkaido),
+// japan-guide & travel blogs. rating = what the source actually says.
+const ACTIVITIES = [
+// —— SAPPORO / OTARU / JOZANKEI ——
+{name:"Sapporo Beer Museum & Beer Garden",jp:"サッポロビール博物館",area:"Sapporo",category:"museum",lat:43.0724,lng:141.3676,duration:"1.5–2.5 h",rating:"TripAdvisor top-15 Sapporo, ~4.0/5",quote:"Free tour full of good history, then jingisukan and fresh Sapporo Classic next door.",source:"https://www.tripadvisor.com/Attraction_Review-g298560-d319633-Reviews-Sapporo_Beer_Museum-Sapporo_Hokkaido.html",nov:"Indoor — perfect cold/wet-weather option"},
+{name:"Mt. Moiwa Ropeway night view",jp:"藻岩山",area:"Sapporo",category:"sight",lat:43.0223,lng:141.3229,duration:"1.5–2 h",rating:"TripAdvisor ~4.4/5 · one of Japan's 'three best night views'",quote:"The ropeway + mini cable car is scenic itself; the summit night view is spectacular.",source:"https://www.tripadvisor.com/AttractionsNear-g298560-d320888-Mt_Moiwa-Tripadvisor.html",nov:"Sunset ~16:15 — go late afternoon; closes in high wind"},
+{name:"Soup Curry GARAKU",jp:"スープカレーGARAKU",area:"Sapporo",category:"food",lat:43.0562,lng:141.3535,duration:"1–1.5 h + queue",rating:"TripAdvisor ~4.0/5 · 'longest queue in Hokkaido'",quote:"Deep, complex chicken broth worth it — expect a numbered ticket and ~1 h wait.",source:"https://www.tripadvisor.com/Restaurant_Review-g298560-d5611884-Reviews-Soup_Curry_Garaku-Sapporo_Hokkaido.html",nov:null},
+{name:"Suage+ soup curry",jp:"すあげプラス",area:"Sapporo",category:"food",lat:43.0558,lng:141.3548,duration:"1 h",rating:"Traveler favorite · shorter waits than GARAKU",quote:"Skewered fried vegetables, lighter broth — great soup curry without GARAKU's line.",source:"https://big-east-park.com/blogs/hokkaido-soup-curry-garaku/local-guide-best-soup-curry-sapporo-how-to-eat",nov:null},
+{name:"Jingisukan Daruma (Susukino)",jp:"成吉思汗だるま",area:"Sapporo",category:"food",lat:43.0526,lng:141.3565,duration:"1–1.5 h",rating:"Cited as THE jingisukan spot since 1954",quote:"Premium lamb, no gamey smell — queues form early at the original shop.",source:"https://www.byfood.com/blog/sapporo/jingisukan-restaurants",nov:"Queue is outdoors — bring a coat"},
+{name:"Ganso Ramen Yokocho (Ramen Alley)",jp:"元祖さっぽろラーメン横丁",area:"Sapporo",category:"food",lat:43.0546,lng:141.3557,duration:"1 h",rating:"Historic birthplace of miso ramen · 17 shops",quote:"Atmospheric but touristy — purists head to Sumire's main shop instead.",source:"https://japancheapo.com/food-and-drink/sapporo-food-guide/",nov:null},
+{name:"Sumire miso ramen (honten)",jp:"すみれ",area:"Sapporo",category:"food",lat:43.0175,lng:141.3689,duration:"45 min",rating:"Legendary — the benchmark Sapporo miso",quote:"Rich lard-capped miso soup with curly noodles; the lard keeps it scalding.",source:"https://japancheapo.com/food-and-drink/sapporo-food-guide/",nov:null},
+{name:"Jogai (Curb) Market kaisendon",jp:"札幌場外市場",area:"Sapporo",category:"food",lat:43.0710,lng:141.3195,duration:"1–1.5 h",rating:"TripAdvisor reviewers: 'better than Nijo Market'",quote:"Feels more local — pick a live crab and they cook it behind the stall.",source:"https://www.tripadvisor.com/ShowUserReviews-g298560-d1340054-r444561790-Sapporo_Central_Wholesale_Market_Jogai_Market-Sapporo_Hokkaido.html",nov:"Morning only; stalls close early afternoon"},
+{name:"Nijo Market",jp:"二条市場",area:"Sapporo",category:"food",lat:43.0576,lng:141.3595,duration:"45 min",rating:"TripAdvisor ~3.5/5 — mixed; smaller & pricier than Jogai",quote:"Fine for a quick uni don if nearby — otherwise choose Jogai Market.",source:"https://www.tripadvisor.com.sg/ShowUserReviews-g298560-d1384185-r486714673-Nijo_Market-Sapporo_Hokkaido.html",nov:null},
+{name:"Bar Yamazaki",jp:"BARやまざき",area:"Sapporo",category:"nightlife",lat:43.0553,lng:141.3542,duration:"1–2 h",rating:"TripAdvisor 4.5/5 · Sapporo's first cocktail bar (1958)",quote:"Tiny old-school bar of a legendary bartender — 200 original cocktails.",source:"https://www.tripadvisor.com/Restaurant_Review-g298560-d16894679-Reviews-Bar_Yamazaki-Sapporo_Hokkaido.html",nov:"¥800 seat charge + 10% service"},
+{name:"Odori Park & TV Tower",jp:"大通公園",area:"Sapporo",category:"sight",lat:43.0596,lng:141.3477,duration:"1 h",rating:"TripAdvisor ~4.3/5 · top free thing in Sapporo",quote:"1.5 km linear park loved by locals — the city's living room.",source:"https://www.tripadvisor.com/Attraction_Review-g298560-d319638-Reviews-Odori_Park-Sapporo_Hokkaido.html",nov:"White Illumination usually starts late Nov — check dates"},
+{name:"Moerenuma Park (Noguchi)",jp:"モエレ沼公園",area:"Sapporo",category:"nature",lat:43.1225,lng:141.4285,duration:"2–3 h",rating:"Repeatedly cited hidden gem · free",quote:"A landfill turned into one giant Noguchi sculpture — missed by most first-timers.",source:"https://tokyocandies.com/sapporo-off-the-beaten-path-16-hidden-gems-in-sapporo-only-locals-know-2025/",nov:"Hours shorten to 17:00; fountains off — best on a clear day"},
+{name:"Shiroi Koibito Park",jp:"白い恋人パーク",area:"Sapporo",category:"experience",lat:43.0895,lng:141.2725,duration:"1.5–2 h",rating:"TripAdvisor ~4.0/5 · family favorite",quote:"Kitschy but fun — cookie workshops; charming dusted with early snow.",source:"https://planvacationasia.com/sapporo-hidden-gems",nov:"Mostly indoor; illumination begins in Nov"},
+{name:"Tanukikoji Arcade & Susukino wander",jp:"狸小路商店街",area:"Sapporo",category:"shopping",lat:43.0568,lng:141.3520,duration:"1–2 h",rating:"Traveler staple · fully covered arcade",quote:"A kilometer of covered arcade — perfect when it's sleeting, spilling into neon Susukino.",source:"https://www.tripadvisor.com/Attractions-g298560-Activities-Sapporo_Hokkaido.html",nov:"Covered — good bad-weather backup"},
+{name:"Otaru Canal at dusk",jp:"小樽運河",area:"Otaru",category:"sight",lat:43.1985,lng:140.9950,duration:"1 h",rating:"TripAdvisor ~4.0/5 (thousands of reviews)",quote:"Prettiest at dusk when gas lamps reflect on the water — pair with Sakaimachi St.",source:"https://www.tripadvisor.com/Attraction_Review-g298153-d1675920-Reviews-Otaru_Canal-Otaru_Hokkaido.html",nov:"Dusk ~16:15; cold sea wind"},
+{name:"Sakaimachi St: Music Box Museum · Kitaichi Glass · LeTAO",jp:"堺町通り",area:"Otaru",category:"shopping",lat:43.1926,lng:141.0022,duration:"2–3 h",rating:"TripAdvisor top Otaru · 38,000-piece music box hall",quote:"Kitaichi's café lit by 160 oil lamps is magical; LeTAO double fromage is the must-eat.",source:"https://www.jeepe.jp/en/articles/otaru-music-box-glass-1522",nov:"Most shops close ~18:00 — do before the canal at dusk"},
+{name:"Sankaku Market kaisendon",jp:"三角市場",area:"Otaru",category:"food",lat:43.1970,lng:140.9922,duration:"1 h",rating:"Praised for freshness, flagged for tourist prices",quote:"Incredibly fresh bowls (¥2–5k) in tiny family stalls — bring cash.",source:"https://airial.travel/attractions/japan/otaru/otaru-sankaku-market-IydK9b05",nov:"Best in the morning"},
+{name:"Otaru sushi: Isezushi / Masazushi",jp:"伊勢鮨・政寿司",area:"Otaru",category:"food",lat:43.1907,lng:140.9987,duration:"1–1.5 h",rating:"Isezushi held a Michelin star; Masazushi 80+ yrs",quote:"Otaru is Hokkaido's sushi town — all-wild-caught nigiri draws diners from abroad.",source:"https://unga-plus.com/en/blogs/otaru/2853617",nov:"Isezushi needs reservation; closed Wed"},
+{name:"Nikka Whisky Yoichi Distillery",jp:"ニッカ余市蒸溜所",area:"Otaru",category:"experience",lat:43.1900,lng:140.7844,duration:"2–3 h",rating:"TripAdvisor 4.5/5 — 'definitely worth the visit'",quote:"Birthplace of Japanese whisky — museum, exclusive tastings, easily hours here.",source:"https://www.tripadvisor.com/Attraction_Review-g1025642-d1363054-Reviews-Nikka_Whisky_Yoichi_Distillery-Yoichi_cho_Yoichi_gun_Hokkaido.html",nov:"Tour needs advance booking; the driver can't taste"},
+{name:"Hoheikyo Onsen",jp:"豊平峡温泉",area:"Jozankei",category:"onsen",lat:42.9740,lng:141.1560,duration:"2–3 h",rating:"Repeatedly called best day-trip onsen near Sapporo",quote:"One of Japan's biggest rotenburo (~200 people) — and weirdly great Indian curry in the canteen.",source:"https://jozankei.jp/en/oneday/hoheikyo-onsen/",nov:"Outdoor bath in cold air is the whole point; cash only, tattoo-friendly"},
+{name:"Jozankei footbaths & Futami Bridge",jp:"二見吊橋",area:"Jozankei",category:"onsen",lat:42.9666,lng:141.1666,duration:"1–2 h",rating:"japan-guide featured classic side trip",quote:"Free public footbaths and the red gorge bridge make a chill half-day.",source:"https://www.japan-guide.com/e/e6745.html",nov:"Foliage done by early Nov; possible first snow on the road"},
+// —— SOUTHWEST ——
+{name:"Goshiki Onsen",jp:"五色温泉",area:"Niseko",category:"onsen",lat:42.87,lng:140.64,duration:"1–1.5 h",rating:"Day-use baths widely praised · ¥800 cash",quote:"Rustic milky sulfur bath in a valley between Annupuri and Iwaonupuri — fantastic views.",source:"https://www.tripadvisor.com/Attraction_Review-g321549-d1424111-Reviews-Niseko_Goshiki_Onsenkyo-Niseko_cho_Abuta_gun_Hokkaido.html",nov:"Access road can get early snow — check before driving up"},
+{name:"Yukichichibu mud-bath onsen",jp:"雪秩父",area:"Niseko",category:"onsen",lat:42.89,lng:140.60,duration:"1–1.5 h",rating:"Blogs call it Niseko's most fun/authentic onsen",quote:"Smear grey thermal mud on like a facial — skin feels silky afterwards.",source:"https://www.tripadvisor.com/Attraction_Review-g1120319-d13428747-Reviews-Yukichichibu-Rankoshi_cho_Isoya_gun_Hokkaido.html",nov:"Closed Tue; cash only; mud baths are women's side only"},
+{name:"Rakuichi soba (Bourdain's 12-seat hut)",jp:"そば処 楽一",area:"Niseko",category:"food",lat:42.80,lng:140.66,duration:"1–2 h",rating:"'One of the most respected soba houses in Japan'",quote:"Handmade soba cut in front of you in a tiny forest hut — walk in early (~11am) for lunch.",source:"https://www.tripadvisor.com/Restaurant_Review-g321549-d3605785-Reviews-Sobadokoro_Rakuichi-Niseko_cho_Abuta_gun_Hokkaido.html",nov:"Often closes for a break before ski season — call ahead"},
+{name:"Fukidashi Park spring water",jp:"ふきだし公園",area:"Niseko",category:"nature",lat:42.90,lng:140.87,duration:"1 h",rating:"TripAdvisor ~4.4/5",quote:"Crystal volcanic spring gushing from Yōtei's base — bring a bottle to fill.",source:"https://www.tripadvisor.com/Attraction_Review-g1120345-d1425243-Reviews-Fukidashi_Park-Kyogoku_cho_Abuta_gun_Hokkaido.html",nov:"Snow-capped Yōtei photos; paths can be icy"},
+{name:"Milk Kobo farm sweets",jp:"ミルク工房",area:"Niseko",category:"food",lat:42.84,lng:140.72,duration:"30–45 min",rating:"TripAdvisor ~4.3/5 (hundreds of reviews)",quote:"Cream puffs, cheese tarts and soft-serve with Yōtei framed behind the shop.",source:"https://www.tripadvisor.com/Attraction_Review-g321549-d1749603-Reviews-Milk_Kobo-Niseko_cho_Abuta_gun_Hokkaido.html",nov:null},
+{name:"Cape Kamui walk",jp:"神威岬",area:"Shakotan",category:"nature",lat:43.33,lng:140.35,duration:"1.5–2 h",rating:"TripAdvisor ~4.5/5 (1,000+ reviews)",quote:"'Shakotan Blue' water and the ridge trail to the lighthouse are jaw-dropping on a clear day.",source:"https://www.tripadvisor.com/Attraction_Review-g1120324-d1384203-Reviews-Cape_Kamui-Shakotan_cho_Shakotan_gun_Hokkaido.html",nov:"Gate 8:00–16:30; walkway CLOSES in strong wind — fierce coastal gusts likely"},
+{name:"Shimamui Coast lookout",jp:"島武意海岸",area:"Shakotan",category:"nature",lat:43.36,lng:140.44,duration:"30–60 min",rating:"TripAdvisor ~4.4/5 · 'Japan's 100 best beaches'",quote:"Walk through a dark tunnel and emerge above an impossibly blue cove.",source:"https://www.tripadvisor.com/Attraction_Review-g1120324-d1373866-Reviews-Shimamui_Coast-Shakotan_cho_Shakotan_gun_Hokkaido.html",nov:"Beach steps can close in wind/rain"},
+{name:"Shakotan seafood lunch",jp:"積丹 海鮮丼",area:"Shakotan",category:"food",lat:43.30,lng:140.47,duration:"1 h",rating:"~4/5 — but uni is the summer draw",quote:"The famous raw uni bowls are extraordinary — but they're a summer thing.",source:"https://hokkaido-adventures.com/shakotan-peninsula-hokkaido/",nov:"Uni season is Jun–Aug — Nov means frozen/imported uni; go for general kaisendon"},
+{name:"The Windsor Hotel Toya (rim view tea/lunch)",jp:"ウィンザーホテル洞爺",area:"Toya",category:"experience",lat:42.55,lng:140.76,duration:"1–3 h",rating:"TripAdvisor 4/5 (766) · G8 summit venue",quote:"Caldera-rim perch with lake on one side, sea on the other — even lobby coffee is worth the drive.",source:"https://www.tripadvisor.com/Hotel_Review-g670061-d302436-Reviews-The_Windsor_Hotel_Toya-Toyako_cho_Abuta_gun_Hokkaido.html",nov:"Hilltop often in cloud — go on a clear morning"},
+{name:"Usuzan Ropeway + Showa Shinzan",jp:"有珠山・昭和新山",area:"Toya",category:"nature",lat:42.54,lng:140.86,duration:"1.5–2 h",rating:"TripAdvisor ~4.3/5",quote:"Up the active volcano for lake, red lava dome, and ocean views.",source:"https://www.tripadvisor.ca/Attraction_Review-g1120903-d14455940-Reviews-Usuzan_Ropeway-Sobetsu_cho_Usu_gun_Hokkaido.html",nov:"Annual maintenance shutdown often falls early-mid Nov — check the day before"},
+{name:"Lake Hill Farm gelato",jp:"レークヒル・ファーム",area:"Toya",category:"food",lat:42.60,lng:140.79,duration:"30–60 min",rating:"TripAdvisor ~4.3/5 · blog 'must-do'",quote:"Farm gelato with Yōtei and lake views — great mid-drive break.",source:"https://www.tripadvisor.com/Attraction_Review-g670061-d3532586-Reviews-Lake_Hill_Farm-Toyako_cho_Abuta_gun_Hokkaido.html",nov:"Indoor café open; flower fields done"},
+{name:"Toyako lakeside baths & free ashiyu",jp:"洞爺湖温泉",area:"Toya",category:"onsen",lat:42.57,lng:140.82,duration:"1–2 h",rating:"Day-use hotel baths ~4/5",quote:"Rooftop lake-view bath facing Nakajima island — the signature Toya experience.",source:"https://www.japan-guide.com/e/e6714.html",nov:"Nightly lake fireworks END late Oct — don't plan around them"},
+{name:"Jigokudani (Hell Valley)",jp:"登別地獄谷",area:"Noboribetsu",category:"nature",lat:42.50,lng:141.15,duration:"1–1.5 h",rating:"TripAdvisor ~4.4/5 (2,000+)",quote:"Steaming sulfur valley on easy boardwalks — otherworldly with a dusting of snow.",source:"https://www.japan-guide.com/e/e6751.html",nov:"Free, year-round; boardwalks icy — Oyunuma trail may close with snow"},
+{name:"Oyunuma River natural footbath",jp:"大湯沼川天然足湯",area:"Noboribetsu",category:"onsen",lat:42.51,lng:141.14,duration:"30–60 min",rating:"TripAdvisor ~4.4/5 · 'unexpected highlight'",quote:"A hot-spring river you dip your feet in, forest all around — mats provided.",source:"https://www.tripadvisor.com/Attraction_Review-g325583-d2480786-Reviews-Oyunumagawa_Natural_Footbath-Noboribetsu_Hokkaido.html",nov:"Can run lukewarm in cold season; trail closes once snow sets in"},
+{name:"Dai-ichi Takimotokan day-use baths",jp:"第一滝本館",area:"Noboribetsu",category:"onsen",lat:42.49,lng:141.14,duration:"1.5–3 h",rating:"TripAdvisor ~4.3/5 · r/JapanTravel pick for day bathing",quote:"Enormous hall, 7 spring-water types, picture windows onto Hell Valley.",source:"https://www.memoirsofaglobetrotter.com/noboribetsu-onsen-travel-guide/",nov:"Day use ¥2,250 (9:00–16:00), ¥1,700 after 16:00; no tattoos"},
+{name:"Noboribetsu Bear Park",jp:"クマ牧場",area:"Noboribetsu",category:"experience",lat:42.49,lng:141.13,duration:"1.5–2 h",rating:"TripAdvisor ~3.5/5 — genuinely MIXED",quote:"Bears up close, but many travelers didn't love the conditions — skip if welfare-sensitive.",source:"https://www.helenabradbury.com/blog-1/the-best-things-to-do-in-noboribetsu-onsen-town-hokkaido",nov:"Ropeway pauses in high wind + autumn maintenance days"},
+{name:"Muroran yakitori — Ippei (it's pork!)",jp:"やきとりの一平",area:"Muroran",category:"food",lat:42.34,lng:140.98,duration:"1–1.5 h",rating:"Est. 1950 · 2× National Yakitori Olympics winner",quote:"Muroran 'yakitori' is pork with onion and hot mustard — beloved B-class gourmet.",source:"https://www.tripadvisor.com/Restaurant_Review-g1056644-d6787012-Reviews-Yakitori_no_Ippei_Nakajima_Honten-Muroran_Hokkaido.html",nov:"Evenings only — pair with Cape Chikyū at sunset"},
+{name:"Cape Chikyū (Earth Cape)",jp:"地球岬",area:"Muroran",category:"sight",lat:42.30,lng:140.99,duration:"30–45 min",rating:"TripAdvisor ~4.3/5",quote:"150 m clifftop where the Pacific horizon visibly curves — quick, free, dramatic.",source:"https://www.visit-hokkaido.jp/en/spot/detail_12815.html",nov:"Very exposed — windproof layer"},
+{name:"Lake Shikotsu winter clear-canoe",jp:"支笏湖クリアカヌー",area:"Shikotsu",category:"experience",lat:42.77,lng:141.35,duration:"1.5–2 h",rating:"Tours ~5/5 · Japan's #1 lake water quality 11+ yrs",quote:"Glass-bottom canoe over 25 m visibility — operators run an explicit Nov–Mar winter program.",source:"https://www.tripadvisor.com/AttractionProductReview-g19406229-Winter_Program_November_March_Lake_Shikotsu_Winter_Canoe-Chitose_Hokkaido.html",nov:"Runs in Nov (lake never freezes); small groups — book ahead"},
+{name:"Marukoma Onsen lakeside rotenburo",jp:"丸駒温泉",area:"Shikotsu",category:"onsen",lat:42.79,lng:141.30,duration:"1–1.5 h",rating:"TripAdvisor ~4.3/5 · japan-guide standout",quote:"Century-old open-air bath literally at lake level — depth changes with the lake.",source:"https://www.japan-guide.com/e/e6736.html",nov:"Natural bath tracks lake temp (cool); confirm day-use hours first"},
+{name:"Salmon Hometown Chitose Aquarium",jp:"サケのふるさと千歳水族館",area:"Shikotsu",category:"museum",lat:42.82,lng:141.65,duration:"1–1.5 h",rating:"TripAdvisor ~4.4/5 · classic last stop before CTS",quote:"Underwater windows look into the actual river — spawning salmon still visible in early Nov.",source:"https://www.tripadvisor.com/Attraction_Review-g298145-d1238296-Reviews-Salmon_Hometown_Chitose_Aquarium-Chitose_Hokkaido.html",nov:"Peak salmon run is Sep–Oct; early Nov usually still active"},
+// —— CENTRAL / NORTH ——
+{name:"Asahiyama Zoo",jp:"旭山動物園",area:"Asahikawa",category:"experience",lat:43.77,lng:142.48,duration:"3–4 h",rating:"TripAdvisor ~4.5/5 (3,000+) · Japan's best behavior-exhibit zoo",quote:"Polar bears and penguins are far more active in the cold — paths get slippery.",source:"https://www.tripadvisor.com/Attraction_Review-g319103-d780529-Reviews-Asahiyama_Zoo-Asahikawa_Hokkaido.html",nov:"CLOSED ~Nov 4–10 for winter changeover, then 10:30–15:30; penguin walk starts mid-Dec"},
+{name:"Baikohken honten ramen",jp:"梅光軒 本店",area:"Asahikawa",category:"food",lat:43.764,lng:142.359,duration:"30–45 min",rating:"Consensus pick for most authentic Asahikawa shoyu",quote:"Heartier double-broth shoyu with thick chashu — the go-to bowl in town.",source:"https://www.mytravelbuzzg.com/best-asahikawa-ramen-baikohken-honten/",nov:null},
+{name:"Asahikawa Ramen Aoba (est. 1947)",jp:"らぅめん青葉",area:"Asahikawa",category:"food",lat:43.766,lng:142.358,duration:"30–45 min",rating:"City's oldest ramen shop · top-listed by 5amramen",quote:"Lighter fish-forward shoyu — the classic old-school Asahikawa bowl.",source:"https://www.5amramen.com/post/asahikawa-ramen",nov:"Closes between lunch & dinner, and Wednesdays"},
+{name:"Ramen Village (8 shops)",jp:"あさひかわラーメン村",area:"Asahikawa",category:"food",lat:43.79,lng:142.44,duration:"1 h",rating:"TripAdvisor ~4.0 — mixed: 'sampler, but honten shops are better'",quote:"Eight famous shops under one roof — handy, but branch bowls run average.",source:"https://wanderlog.com/place/details/24713/asahikawa-ramen-village",nov:null},
+{name:"Otokoyama Sake Brewery Museum",jp:"男山酒造り資料舘",area:"Asahikawa",category:"museum",lat:43.81,lng:142.39,duration:"45 min–1 h",rating:"TripAdvisor ~4.0 · free entry & tastings",quote:"Edo-period brewing tools plus generous free tastings — the daiginjo alone is worth it.",source:"https://www.tripadvisor.com/ShowUserReviews-g319103-d3634108-r626293076-Otokoyama_Sakezukuri_Museum-Asahikawa_Hokkaido.html",nov:"Nov is early brewing season — you may see production"},
+{name:"Shirogane Blue Pond",jp:"白金青い池",area:"Biei",category:"nature",lat:43.497,lng:142.617,duration:"30–45 min",rating:"TripAdvisor ~4.0/5 (1,500+) — polarizing once frozen",quote:"Early Nov is the sweet spot: still-blue water with first snow on the larches.",source:"https://www.tripadvisor.com/ShowUserReviews-g1120350-d1815328-r340114840-Shirogane_Blue_Pond-Biei_cho_Kamikawa_gun_Hokkaido.html",nov:"Night LED illumination Nov 1–Apr 30 from 17:00"},
+{name:"Shirahige Falls night light-up",jp:"白ひげの滝",area:"Biei",category:"nature",lat:43.487,lng:142.632,duration:"20–30 min",rating:"TripAdvisor ~4.5 · 'exceeds expectations'",quote:"White falls over the cobalt Biei River, patterns changing every couple of minutes.",source:"https://hokkaido-labo.com/en/area/furano/lighting-up-shirahige-fall",nov:"Lit 17:00–21:00 from Nov 1; free from the bridge — pair with Blue Pond"},
+{name:"Biei Patchwork Road drive",jp:"パッチワークの路",area:"Biei",category:"sight",lat:43.60,lng:142.44,duration:"1.5–2.5 h",rating:"TripAdvisor ~4.5 — but shoulder-season split",quote:"By Nov the fields are brown — the draw shifts to golden larch or fresh-snow minimalism.",source:"https://www.japan-guide.com/e/e6828.html",nov:"Not the postcard green; icy rural roads"},
+{name:"Fukiage wild open-air onsen (free, 24h)",jp:"吹上露天の湯",area:"Biei",category:"onsen",lat:43.44,lng:142.63,duration:"1 h",rating:"TripAdvisor ~4.5 · reddit cult favorite",quote:"Go at dawn and the forest pools may be entirely yours — mixed-gender, swimsuit advised.",source:"https://www.tripadvisor.com/Attraction_Review-g1120351-d1424094-Reviews-Fukiage_Onsen-Kamifurano_cho_Sorachi_gun_Hokkaido.html",nov:"Mountain road snowy/icy in Nov — winter tires essential; bare-hut changing"},
+{name:"Ningle Terrace at dusk",jp:"ニングルテラス",area:"Furano",category:"experience",lat:43.318,lng:142.357,duration:"1 h",rating:"TripAdvisor ~4.0 (500+) · 'magical at dusk'",quote:"Fairy-lit craft cottages in the forest — best 16:30–17:30 when lights come on.",source:"https://www.tripadvisor.com/Attraction_Review-g674811-d1812419-Reviews-Ningle_Terrace-Furano_Hokkaido.html",nov:"Open in Nov; prettiest with snow on roofs — early Nov may be snowless"},
+{name:"Furano Cheese Factory",jp:"富良野チーズ工房",area:"Furano",category:"food",lat:43.32,lng:142.36,duration:"45 min–1.5 h",rating:"TripAdvisor ~4.0 — 'a large shop unless you book a workshop'",quote:"Free tastings, wine-cheddar, cheese soft-serve — book a making-workshop for the 'factory' part.",source:"https://www.tripadvisor.com/Attraction_Review-g674811-d1424087-Reviews-Furano_Cheese_Factory-Furano_Hokkaido.html",nov:"Winter hours ~9:00–16:00"},
+{name:"Campana Rokkatei",jp:"カンパーナ六花亭",area:"Furano",category:"food",lat:43.37,lng:142.42,duration:"45 min",rating:"TripAdvisor ~4.5 · 'a must visit'",quote:"Marvellous cakes and free coffee with huge windows over vineyard and the Tokachi range.",source:"https://www.tripadvisor.com/Attraction_Review-g674811-d2318056-Reviews-Campana_Rokkatei-Furano_Hokkaido.html",nov:"Shorter hours (~10–16); vineyard bare but mountains deliver"},
+{name:"Furano Winery free tasting",jp:"ふらのワイン工場",area:"Furano",category:"experience",lat:43.36,lng:142.37,duration:"45 min–1 h",rating:"TripAdvisor ~3.5–4.0 · low-key",quote:"Free self-guided visit and tasting with a hilltop view — modest but worthwhile.",source:"https://www.tripadvisor.com/Attraction_Review-g674811-d1852944-Reviews-Furano_Wine_Factory-Furano_Hokkaido.html",nov:"Indoor — reliable bad-weather stop; driver can't taste"},
+{name:"Sounkyo Gorge: Ginga & Ryusei Falls",jp:"銀河・流星の滝",area:"Sounkyo",category:"nature",lat:43.71,lng:142.97,duration:"1–1.5 h",rating:"TripAdvisor ~4.5 · both on Japan's Top 100 Waterfalls",quote:"Two 100 m falls down columnar cliffs — the 20-min climb to Sobakudai frames both at once.",source:"https://www.japan-guide.com/e/e6777.html",nov:"Stark, possibly snow-dusted cliffs; icy paths"},
+{name:"Kurodake Ropeway",jp:"黒岳ロープウェイ",area:"Sounkyo",category:"nature",lat:43.727,lng:142.949,duration:"1.5–2 h",rating:"TripAdvisor ~4.5",quote:"Quickest way onto the Daisetsuzan 'roof of Hokkaido' — snowscapes weeks before the valley whitens.",source:"https://www.visit-hokkaido.jp/en/spot/detail_10350.html",nov:"CLOSED ~Nov 10–30 for maintenance — only viable the first week of Nov"},
+{name:"Kurodake-no-yu public bath",jp:"黒岳の湯",area:"Sounkyo",category:"onsen",lat:43.725,lng:142.951,duration:"1 h",rating:"TripAdvisor ~4.0 · village public bath",quote:"Rooftop rotenburo looking at the gorge cliffs — ideal after the falls walk. ~¥600.",source:"https://www.japan-guide.com/e/e6777.html",nov:"Open year-round; village is quiet — restaurants shut early"},
+{name:"Hoshino Tomamu Ice Village",jp:"トマム 氷のヴィレッジ",area:"Tomamu",category:"experience",lat:43.06,lng:142.62,duration:"2–3 h evening",rating:"~4.5 for the resort — but seasonal",quote:"A glowing village of ice domes and an ice bar — magical, but it doesn't exist yet in November.",source:"https://www.snowtomamu.jp/winter/en/icevillage/",nov:"SKIP: opens ~Dec 10. Unkai Terrace also closed (mid-Oct). Nov is Tomamu's dead season"},
+// —— EAST ——
+{name:"Butadon no Tonta",jp:"ぶた丼のとん田",area:"Obihiro",category:"food",lat:42.94,lng:143.18,duration:"45 min + queue",rating:"Local favorite · Tabelog ~3.7",quote:"Best-value butadon in town — order the loin/belly mix; arrive before 13:00, it sells out.",source:"https://hokkaidoguide.com/butadon-tonta/",nov:"Lunch-focused; check closed days"},
+{name:"Butadon Panchou (the 1933 original)",jp:"ぱんちょう",area:"Obihiro",category:"food",lat:42.921,lng:143.202,duration:"45 min–1 h",rating:"The originator · TripAdvisor ~4.0",quote:"Charcoal-grilled loin with the secret sauce — touristy line, but the 'standard' taste.",source:"https://livejapan.com/en/in-hokkaido/in-pref-hokkaido/in-obihiro/article-a1000031/",nov:"Closed Mondays; Hage-ten is the backup"},
+{name:"Rokkatei Obihiro flagship (Sakusaku Pie)",jp:"六花亭 帯広本店",area:"Obihiro",category:"food",lat:42.923,lng:143.198,duration:"30–45 min",rating:"TripAdvisor ~4.5",quote:"Sakusaku custard pie filled to order, only sold in Obihiro — eat it on the spot; free coffee.",source:"https://www.tripadvisor.com/Restaurant_Review-g608507-d1192972-Reviews-Rokkatei_Obihiro_Honten-Obihiro_Hokkaido.html",nov:null},
+{name:"Tokachigawa moor onsen",jp:"十勝川温泉",area:"Obihiro",category:"onsen",lat:42.94,lng:143.28,duration:"1.5–3 h",rating:"Hokkaido Heritage Site · hotel baths rate very high",quote:"Rare plant-derived tea-brown water, silky like bathing in natural lotion.",source:"https://www.tokachigawa.net/english/destination/tokachigawa.html",nov:"Day-use typically 13:00–20:00 — perfect cold-evening stop"},
+{name:"Washo Market kattedon (DIY bowl)",jp:"和商市場 勝手丼",area:"Kushiro",category:"food",lat:42.987,lng:144.379,duration:"45 min–1 h",rating:"TripAdvisor ~4.0 (600+) · one of Hokkaido's three big markets",quote:"Buy rice, then build your own bowl from the sashimi stalls — watch prices add up.",source:"https://www.tripadvisor.com/Restaurant_Review-g298147-d1693346-Reviews-Kushiro_Washo_Ichiba-Kushiro_Hokkaido.html",nov:"Morning–lunch; stalls close mid-afternoon"},
+{name:"Kushiro Robata (birthplace of robatayaki)",jp:"炉ばた",area:"Kushiro",category:"food",lat:42.984,lng:144.383,duration:"1.5–2 h evening",rating:"TripAdvisor ~4.0 · est. 1950s",quote:"Dark, smoky, atmospheric — the elderly proprietress grills everything over charcoal herself.",source:"https://www.tripadvisor.com/Restaurant_Review-g298147-d1308269-Reviews-Kushiro_Robata-Kushiro_Hokkaido.html",nov:"Opens ~17:00, small — arrive early"},
+{name:"Kushiro Marsh — Hosooka Observatory",jp:"細岡展望台",area:"Kushiro",category:"nature",lat:43.09,lng:144.51,duration:"1–1.5 h",rating:"TripAdvisor ~4.5 · free",quote:"Sweeping view of the meandering river across Japan's largest wetland — serene at sunset.",source:"https://www.tripadvisor.com/Attraction_Review-g1120385-d2286451-Reviews-Hosooka_Observation-Kushiro_cho_Hokkaido.html",nov:"Lounge closes 16:00; Norokko train season over — drive in"},
+{name:"Akan International Crane Center",jp:"阿寒国際ツルセンター",area:"Akan",category:"wildlife",lat:43.16,lng:144.09,duration:"1–1.5 h",rating:"TripAdvisor ~4.5 · only guaranteed tancho viewing",quote:"Cranes gather at the winter feeding ground from November — close views without long lenses.",source:"https://www.visit-hokkaido.jp/en/spot/detail_10245.html",nov:"Feeding begins ~Nov 1 — the best early-Nov crane bet"},
+{name:"Tsurui-Ito Tancho Sanctuary",jp:"鶴居・伊藤サンクチュアリ",area:"Akan",category:"wildlife",lat:43.23,lng:144.32,duration:"1 h",rating:"TripAdvisor ~4.5 · photographers' favorite",quote:"In season 200–300 cranes at the 9:00 and 14:00 feedings — heated observation room.",source:"https://mobile.wbsj.org/en/tsurui/",nov:"Feeding starts mid-late Nov — early Nov may be sparse; prefer Akan Crane Center"},
+{name:"Ainu Kotan + Lost Kamuy show",jp:"阿寒湖アイヌコタン",area:"Akan",category:"experience",lat:43.43,lng:144.09,duration:"2–3 h",rating:"TripAdvisor ~4.0 — village is shops; the show redeems it",quote:"The Lost Kamuy show (Ainu dance + 3D projection, Ezo wolf story) is the real highlight. ~¥2,200.",source:"https://www.tripadvisor.com/ShowUserReviews-g298147-d2533639-r707422053-Lake_Akan_Ainu_Kotan-Kushiro_Hokkaido.html",nov:"Kamuy Lumina night walk usually ends mid-Nov; boat cruises end with ice-up"},
+{name:"Lake Akan Bokke mud volcanoes walk",jp:"ボッケ遊歩道",area:"Akan",category:"nature",lat:43.44,lng:144.10,duration:"1–2 h",rating:"TripAdvisor ~4.0 · free footbaths in town",quote:"Easy lakeside forest trail to bubbling mud pots, then a lakeview rotenburo.",source:"http://en.kushiro-lakeakan.com/things_to_do/3785/",nov:"Trail icy after early snow"},
+{name:"Lake Mashū Observatory No.1",jp:"摩周湖第一展望台",area:"Mashu",category:"sight",lat:43.565,lng:144.52,duration:"30–45 min",rating:"TripAdvisor ~4.5 (1,000+) · one of Earth's clearest lakes",quote:"When the famous fog lifts, the caldera blue is unreal — Nov's crisp air improves your odds.",source:"https://www.japan-guide.com/e/e6803.html",nov:"Obs. No.1 open in Nov (No.3 road closes for winter); icy & windy"},
+{name:"Mt. Iō sulfur vents",jp:"硫黄山",area:"Kussharo",category:"nature",lat:43.61,lng:144.44,duration:"30–45 min",rating:"TripAdvisor ~4.0 (500+)",quote:"Roaring fumaroles you walk right up to — try the onsen-steamed eggs.",source:"https://www.myeasternhokkaido.com/lake-kussharo-lake-mashu/",nov:"Steam is most dramatic in cold air; shared parking with Mashū No.1"},
+{name:"Sunayu — dig-your-own hot sand + swans",jp:"砂湯",area:"Kussharo",category:"wildlife",lat:43.63,lng:144.36,duration:"30–60 min",rating:"TripAdvisor ~4.0 · 400–500 whooper swans overwinter",quote:"Dig a hole and hot water bubbles up as Siberian swans glide in meters away.",source:"https://www.visit-hokkaido.jp/en/spa/spot/detail_12084.html",nov:"First swans arrive late Oct–early Nov, numbers build through the month"},
+{name:"Bihoro Pass lookout",jp:"美幌峠",area:"Kussharo",category:"sight",lat:43.65,lng:144.24,duration:"30–45 min",rating:"TripAdvisor ~4.5 · best view of Japan's largest caldera lake",quote:"Short walk from the michi-no-eki to a jaw-dropping caldera panorama.",source:"https://www.tripadvisor.com/Attraction_Review-g1120366-d22879903-Reviews-Bihoro_Pass-Bihoro_cho_Abashiri_gun_Hokkaido.html",nov:"Rt 243 open in winter but icy with high winds — drive carefully"},
+{name:"Abashiri Prison Museum",jp:"博物館網走監獄",area:"Abashiri",category:"museum",lat:43.99,lng:144.24,duration:"1.5–3 h",rating:"TripAdvisor ~4.5 (1,300+) · ¥1,500",quote:"'Expected 15 minutes, stayed 3 hours' — Meiji prison buildings, good English signage, prison-meal lunch.",source:"https://www.tripadvisor.com/Attraction_Review-g651651-d1311503-Reviews-Abashiri_Prison_Museum-Abashiri_Hokkaido.html",nov:"Mostly outdoor walking — dress warm"},
+{name:"Okhotsk Drift Ice Museum (Mt. Tento)",jp:"オホーツク流氷館",area:"Abashiri",category:"museum",lat:43.99,lng:144.26,duration:"1 h",rating:"TripAdvisor ~4.0 — mixed ('small for the price' vs 'must')",quote:"Touch real drift ice in a −15 °C room; the clione sea angels are a hit; 360° rooftop view.",source:"https://www.tripadvisor.com/Attraction_Review-g651651-d1367841-Reviews-or10-Okhotsk_Ryu_hyo_Museum-Abashiri_Hokkaido.html",nov:"Real drift ice arrives late Jan — in Nov this is the only ryuhyo experience; icebreaker cruises don't run"},
+{name:"Shiretoko (Utoro side) — caution flag",jp:"知床",area:"Abashiri",category:"nature",lat:44.07,lng:144.98,duration:"Full day",rating:"UNESCO site — but Reddit consensus: 'shoulder-season limbo' in Nov",quote:"Pass closed, boats done, bears denning — go for Oshinkoshin Falls and coast views, or skip.",source:"https://shiretoko-picchio.com/en/news/winter-closure-of-shiretoko-crossing-road-starting-november-5-2024-at-5pm/",nov:"Shiretoko Pass closes for winter ~Nov 5; Five Lakes boardwalk season ending — optional add-on only"},
+];
+
+// ---------------- LINKS & PHOTOS ----------------
+// Wikipedia page titles per stop name — thumbnails fetched live from the
+// Wikipedia REST API on popup open (stable, no hardcoded image URLs).
+const WIKI = {
+  'New Chitose Airport':'New Chitose Airport',
+  'Sapporo':'Sapporo','Sapporo (stay)':'Sapporo','Sapporo (stay 1/2)':'Sapporo','Sapporo (stay 2/2)':'Sapporo',
+  'Nijo Market':'Nijo Market','Sapporo Beer Museum':'Sapporo Beer Museum','Mt. Moiwa':'Mount Moiwa',
+  'Jingisukan Dinner':'Jingisukan','Jozankei Onsen':'Jōzankei','Jozankei Onsen (day soak)':'Jōzankei',
+  'Otaru Canal':'Otaru','Cape Kamui':'Shakotan, Hokkaidō',
+  'Niseko':'Niseko, Hokkaidō','Niseko (stay 1/2)':'Niseko, Hokkaidō','Niseko (stay 2/2)':'Niseko, Hokkaidō',
+  'Fukidashi Park':'Kyōgoku, Hokkaidō','Milk Kobo':'Mount Yōtei',
+  'Lake Tōya':'Lake Tōya',
+  'Noboribetsu Onsen':'Noboribetsu, Hokkaidō','Noboribetsu Onsen (stay 1/2)':'Noboribetsu, Hokkaidō','Noboribetsu Onsen (stay 2/2)':'Noboribetsu, Hokkaidō',
+  'Oyunuma Footbath':'Noboribetsu, Hokkaidō','Cape Chikyū':'Muroran',
+  'Lake Shikotsu':'Lake Shikotsu','Chitose (stay)':'Chitose, Hokkaidō',
+  'Asahikawa Ramen':'Asahikawa ramen','Shirogane Blue Pond':'Blue Pond (Biei)','Biei (stay)':'Biei, Hokkaidō',
+  'Asahiyama Zoo':'Asahiyama Zoo','Ningle Terrace':'Furano, Hokkaidō','Furano (stay)':'Furano, Hokkaidō',
+  'Tomamu':'Shimukappu, Hokkaidō','Butadon Lunch':'Butadon','Tokachigawa Onsen':'Otofuke, Hokkaidō',
+  'Kushiro Marsh Observatory':'Kushiro Shitsugen National Park','Tsurui Crane Sanctuary':'Red-crowned crane',
+  'Kushiro (stay)':'Kushiro','Lake Akan / Ainu Kotan':'Lake Akan','Lake Mashū':'Lake Mashū',
+  'Kawayu Onsen':'Teshikaga, Hokkaidō','Lake Kussharo · Sunayu':'Lake Kussharo','Bihoro Pass':'Bihoro, Hokkaidō',
+  'Abashiri (stay)':'Abashiri','Ginga / Ryusei Falls':'Sōunkyō','Sounkyo Onsen':'Sōunkyō',
+};
+
+const wikiCache = {};
+async function fetchWiki(title){
+  if(wikiCache[title]) return wikiCache[title];
+  const p = fetch('https://en.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(title))
+    .then(r=>r.ok?r.json():null).catch(()=>null);
+  wikiCache[title]=p; return p;
+}
+
+function mapsUrl(s){
+  return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(s.name.replace(/\s*\((stay|day soak).*?\)/,'')+' '+s.jp+' Hokkaido');
+}
+
+async function enrichPopup(popup, stop){
+  const el = popup.getElement(); if(!el) return;
+  const img = el.querySelector('.pop-img');
+  const wlink = el.querySelector('.pop-links a.wiki');
+  const title = WIKI[stop.name];
+  if(!title || !img) return;
+  const d = await fetchWiki(title);
+  if(d && d.thumbnail){
+    img.src = d.thumbnail.source.replace(/\/\d+px-/,'/480px-');
+    img.classList.remove('hide');
+    img.onerror = ()=>img.classList.add('hide');
+  }
+  if(d && d.content_urls && wlink){ wlink.href = d.content_urls.desktop.page; wlink.style.display=''; }
+  popup.update();
+}
+
+// ---------------- MAP ----------------
+const map = L.map('map',{zoomControl:true, attributionControl:true}).setView([43.4,142.5],7);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:18
+}).addTo(map);
+
+let layerGroup = L.layerGroup().addTo(map);
+let current = WEST;
+let activeDay = null;
+
+const KIND_LABEL = {airport:'Airport',city:'City · Stay',onsen:'Onsen · Stay',sight:'Sight',food:'Eat',detour:'Detour'};
+
+function pinIcon(label, stop){
+  const cls = stop.kind==='airport' ? 'pin airport' : (stop.night ? 'pin night' : 'pin');
+  return L.divIcon({className:'', html:`<div class="${cls}">${label}</div>`, iconSize:[30,30], iconAnchor:[15,15]});
+}
+
+function render(route){
+  current = route; activeDay = null;
+  layerGroup.clearLayers();
+  const daysEl = document.getElementById('days');
+  daysEl.innerHTML = '';
+
+  // route polyline: chain overnight/main stops in order
+  const mainPath = [];
+  route.days.forEach(d => d.stops.forEach(s => { if(s.kind!=='detour') mainPath.push(s.ll); }));
+
+  L.polyline(mainPath,{color:'#f4f1ea',weight:9,opacity:.35}).addTo(layerGroup);
+  L.polyline(mainPath,{color:'#0b1120',weight:6,opacity:.6}).addTo(layerGroup);
+  const line = L.polyline(mainPath,{color:'#ff5a3c',weight:4,dashArray:'10 8',className:'route-anim'}).addTo(layerGroup);
+
+  // detour spurs
+  route.days.forEach(d=>{
+    const anchor = d.stops.find(s=>s.kind!=='detour');
+    d.stops.filter(s=>s.kind==='detour').forEach(s=>{
+      L.polyline([anchor.ll, s.ll],{color:'#ffd24d',weight:3,dashArray:'4 7',opacity:1}).addTo(layerGroup);
+    });
+  });
+
+  // markers + cards
+  let stopCount = 0;
+  route.days.forEach((d,i)=>{
+    d.stops.forEach(s=>{
+      stopCount++;
+      const label = s.kind==='airport' ? '✈' : (s.night ? d.n : '·');
+      const m = L.marker(s.ll,{icon:pinIcon(label,s)}).addTo(layerGroup);
+      m._stop = s;
+      m.bindPopup(`<div class="pop-kind">${KIND_LABEL[s.kind]||'Stop'} · Day ${d.n}</div>
+        <div class="pop-name">${s.name}</div><div class="pop-jp">${s.jp}</div>
+        <img class="pop-img hide" alt="${s.name}">
+        <div class="pop-desc">${s.desc}</div>
+        <div class="pop-links">
+          <a href="${mapsUrl(s)}" target="_blank" rel="noopener">MAPS ↗</a>
+          <a class="wiki" href="#" target="_blank" rel="noopener" style="display:none">WIKI ↗</a>
+        </div>`);
+    });
+
+    const card = document.createElement('div');
+    card.className='day'; card.style.animationDelay=(i*0.05)+'s';
+    card.innerHTML = `
+      <div class="day-head">
+        <div class="day-num">${d.n}</div>
+        <div class="day-title-wrap">
+          <div class="day-date">${d.date}</div>
+          <div class="day-title">${d.title}</div>
+        </div>
+      </div>
+      <div class="day-body">
+        <div class="day-desc">${d.desc}</div>
+        <div class="stops">${d.stops.map(s=>{
+          const cls = s.kind==='onsen'?'stop-chip onsen':(s.kind==='food'?'stop-chip food':'stop-chip');
+          return `<span class="${cls}">${s.night?'● ':''}${s.name}</span>`;}).join('')}
+        </div>
+        ${d.drive?`<div class="drive-tag">Drive <b>${d.drive}</b></div>`:''}
+      </div>`;
+    card.addEventListener('click',()=>{
+      document.querySelectorAll('.day').forEach(el=>el.classList.remove('active'));
+      card.classList.add('active');
+      const b = L.latLngBounds(d.stops.map(s=>s.ll));
+      map.flyToBounds(b.pad(0.45),{duration:.8});
+    });
+    daysEl.appendChild(card);
+  });
+
+  document.getElementById('meta-km').innerHTML = `~${route.km} <span>km</span>`;
+  document.getElementById('meta-stops').textContent = stopCount;
+  document.getElementById('total-km').innerHTML = `TOTAL <b>~${route.km}</b> KM · ${route.name.toUpperCase()}`;
+
+  map.flyToBounds(line.getBounds().pad(0.15),{duration:.9});
+}
+
+map.on('popupopen', e => { if(e.popup._source && e.popup._source._stop) enrichPopup(e.popup, e.popup._source._stop); });
+
+// ---------------- LIBRARY UI ----------------
+const libLayer = L.layerGroup();
+const picks = new Set(JSON.parse(localStorage.getItem('hokkaido-picks')||'[]'));
+const AREAS = [...new Set(ACTIVITIES.map(a=>a.area))];
+const CATS = [...new Set(ACTIVITIES.map(a=>a.category))];
+const fAreas = new Set(), fCats = new Set();
+let picksOnly = false;
+
+const CAT_ICON = {food:'🍜',onsen:'♨',sight:'👁',nature:'🌲',museum:'🏛',experience:'✦',nightlife:'🥃',shopping:'🎁',wildlife:'🦢'};
+
+function savePicks(){
+  localStorage.setItem('hokkaido-picks', JSON.stringify([...picks]));
+  document.getElementById('pick-count').textContent = picks.size;
+}
+
+function libFiltered(){
+  return ACTIVITIES.filter(a=>
+    (!fAreas.size || fAreas.has(a.area)) &&
+    (!fCats.size || fCats.has(a.category)) &&
+    (!picksOnly || picks.has(a.name)));
+}
+
+function actMapsUrl(a){
+  return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a.name.split('(')[0].trim()+' '+a.jp+' Hokkaido');
+}
+
+function renderChips(){
+  const mk = (el,items,set,label)=> {
+    el.innerHTML='';
+    items.forEach(v=>{
+      const c=document.createElement('span');
+      c.className='fchip'+(set.has(v)?' on':'');
+      c.textContent=(label==='cat'?(CAT_ICON[v]||'')+' ':'')+v;
+      c.onclick=()=>{set.has(v)?set.delete(v):set.add(v);renderLibrary();};
+      el.appendChild(c);
+    });
+    if(label==='cat'){
+      const p=document.createElement('span');
+      p.className='fchip'+(picksOnly?' on':'');
+      p.textContent='★ my picks';
+      p.style.borderColor='var(--pine)';
+      p.onclick=()=>{picksOnly=!picksOnly;renderLibrary();};
+      el.appendChild(p);
+    }
+  };
+  mk(document.getElementById('f-area'),AREAS,fAreas,'area');
+  mk(document.getElementById('f-cat'),CATS,fCats,'cat');
+}
+
+function renderLibrary(){
+  renderChips();
+  const list = libFiltered();
+  document.getElementById('lib-count').textContent = list.length+' of '+ACTIVITIES.length+' activities · '+picks.size+' picked';
+  const wrap = document.getElementById('acts');
+  wrap.innerHTML='';
+  libLayer.clearLayers();
+
+  list.forEach(a=>{
+    const picked = picks.has(a.name);
+    // map marker
+    const m = L.marker([a.lat,a.lng],{icon:L.divIcon({className:'',
+      html:`<div class="pin${picked?' night':''}" style="font-size:13px">${CAT_ICON[a.category]||'·'}</div>`,
+      iconSize:[28,28],iconAnchor:[14,14]})}).addTo(libLayer);
+    m.bindPopup(`<div class="pop-kind">${a.category} · ${a.area}</div>
+      <div class="pop-name">${a.name}</div><div class="pop-jp">${a.jp}</div>
+      <div class="pop-desc">“${a.quote}”</div>
+      <div class="pop-links"><a href="${actMapsUrl(a)}" target="_blank" rel="noopener">MAPS ↗</a>
+      <a class="wiki" href="${a.source}" target="_blank" rel="noopener">SOURCE ↗</a></div>`);
+
+    // card
+    const el=document.createElement('div');
+    el.className='act'+(picked?' picked':'');
+    el.innerHTML=`
+      <div class="act-head">
+        <div class="act-head-main">
+          <div class="act-name">${CAT_ICON[a.category]||''} ${a.name}</div>
+          <div class="act-sub"><span class="cat">${a.category}</span> · ${a.area} · ${a.duration}</div>
+        </div>
+        <button class="pick-btn" title="add to picks">${picked?'★':'☆'}</button>
+      </div>
+      <div class="act-body">
+        <div class="act-quote">“${a.quote}”</div>
+        <div class="act-rating">${a.rating}</div>
+        ${a.nov?`<div class="act-nov">${a.nov}</div>`:''}
+        <div class="act-links">
+          <a href="${actMapsUrl(a)}" target="_blank" rel="noopener">MAPS ↗</a>
+          <a href="${a.source}" target="_blank" rel="noopener">SOURCE ↗</a>
+        </div>
+      </div>`;
+    el.querySelector('.pick-btn').onclick=(ev)=>{
+      ev.stopPropagation();
+      picked?picks.delete(a.name):picks.add(a.name);
+      savePicks(); renderLibrary();
+    };
+    el.querySelector('.act-head').onclick=()=>{
+      map.flyTo([a.lat,a.lng],11,{duration:.8});
+      m.openPopup();
+    };
+    wrap.appendChild(el);
+  });
+}
+
+function setView(lib){
+  document.getElementById('tab-itin').classList.toggle('active',!lib);
+  document.getElementById('tab-lib').classList.toggle('active',lib);
+  document.getElementById('itinerary-view').style.display=lib?'none':'';
+  document.getElementById('library').style.display=lib?'block':'none';
+  if(lib){ map.removeLayer(layerGroup); libLayer.addTo(map); renderLibrary(); }
+  else   { map.removeLayer(libLayer); layerGroup.addTo(map); }
+}
+document.getElementById('tab-itin').onclick=()=>setView(false);
+document.getElementById('tab-lib').onclick=()=>setView(true);
+savePicks();
+
+const ROUTES = {'btn-slow':SLOW,'btn-west':WEST,'btn-east':EAST};
+Object.keys(ROUTES).forEach(id=>{
+  document.getElementById(id).addEventListener('click',e=>{
+    document.querySelectorAll('.toggle button').forEach(b=>b.classList.remove('active'));
+    e.currentTarget.classList.add('active');
+    render(ROUTES[id]);
+  });
+});
+
+render(SLOW);
+</script>
+</body>
+</html>
